@@ -12,6 +12,9 @@ struct VALPupitreSimApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .frame(minWidth: 1180, minHeight: 800)
         }
+        .defaultSize(width: 1180, height: 800)
+        .windowResizability(.contentMinSize)
     }
 }
