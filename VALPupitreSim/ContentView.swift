@@ -16,6 +16,9 @@ struct ContentView: View {
         VStack(spacing: 0) {
             statusBar
             stationBar
+            TrackOverview3DView(model: model)
+                .frame(height: 90)
+                .background(Color.black)
             Train3DView(model: model)
                 .frame(minHeight: 320)
                 .background(Color.black)
