@@ -242,6 +242,13 @@ private struct MasterController: View {
                             .frame(width: 36, height: 2))
                         .offset(y: handleOffset)
                         .gesture(dragGesture)
+                        .simultaneousGesture(
+                            TapGesture(count: 2).onEnded {
+                                withAnimation(.spring(duration: 0.25)) {
+                                    value = 0
+                                }
+                            }
+                        )
                 }
                 .frame(width: 52, height: slotHeight)
             }
