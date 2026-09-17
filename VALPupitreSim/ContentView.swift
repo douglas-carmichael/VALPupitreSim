@@ -47,6 +47,7 @@ struct ContentView: View {
             metric("POSITION", value: model.positionLabel)
             metric("VITESSE", value: String(format: "%5.1f km/h", model.speedKMH))
             metric("MAN. T/F", value: String(format: "%+0.2f", model.masterController))
+            debugFlags
             if model.voyantPA {
                 Text(model.paActive ? "PA" : "PA STBY")
                     .font(.system(size: 11, weight: .black))
@@ -89,6 +90,64 @@ struct ContentView: View {
         .background(Color(white: 0.08))
         .foregroundStyle(.white)
         .font(.system(size: 11, weight: .semibold))
+    }
+
+    // Temporary debug flag readout — shows the raw bools that gate PA so we
+    // can spot a mismatch between voyants and underlying state.
+    private var debugFlags: some View {
+        let flags: [(String, Bool)] = [
+            ("KG", model.kg),
+            ("PA", model.paMode),
+            ("EB", model.emergencyBrake),
+            ("DR", model.doorsAreOpen),
+            ("AC", model.paActive),
+        ]
+        return HStack(spacing: 4) {
+            ForEach(flags, id: \.0) { item in
+                Text(item.0)
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(item.1 ? Color.green : Color.red)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+            }
+            Text("dir=\(model.direction.rawValue)")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.blue)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+            Text(String(format: "v=%.2f", model.speedMS))
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.blue)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+            Text(String(format: "e=%+.2f", model.debugLastEffective))
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.purple)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+            Text(String(format: "a=%+.2f", model.debugLastAccel))
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.purple)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+            Text("t=\(model.debugTickCount)")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.purple)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+        }
     }
 
     private func metric(_ title: String, value: String) -> some View {
