@@ -6,11 +6,16 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var model = SimulationModel()
+    let model: SimulationModel
     @State private var audio = AudioEngine()
     @State private var hid: HIDInputManager?
     @State private var audioMuted: Bool = false
     @State private var showGuide: Bool = false
+    @Environment(\.openWindow) private var openWindow
+
+    init(model: SimulationModel = SimulationModel()) {
+        self.model = model
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,6 +48,7 @@ struct ContentView: View {
             Label("VAL 206 SIMULATEUR", systemImage: "tram.fill")
                 .font(.system(size: 13, weight: .bold))
             guideButton
+            cabViewButton
             Spacer()
             metric("POSITION", value: model.positionLabel)
             metric("VITESSE", value: String(format: "%5.1f km/h", model.speedKMH))
@@ -187,6 +193,26 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .help("Guide d'exploitation")
+    }
+
+    private var cabViewButton: some View {
+        Button {
+            openWindow(id: "cab-view")
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "video.fill")
+                    .font(.system(size: 11, weight: .bold))
+                Text("VUE CABINE")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(.cyan)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+        .buttonStyle(.plain)
+        .help("Ouvrir la vue cabine dans une autre fenêtre")
     }
 
     private var soundToggle: some View {
