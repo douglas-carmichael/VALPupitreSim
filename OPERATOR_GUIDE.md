@@ -131,20 +131,57 @@ Doors animate over 0.9 s. Traction is interlocked while any door is open.
 
 ### 2.8 PA Control Profile
 
-`SimulationModel.computePAController` implements a simple
-constant-deceleration profile:
+`SimulationModel.computePAController` implements a closed-loop
+constant-deceleration profile onto the platform mark:
 
-1. Identify the next station ahead in the current direction (or the end of
-   track).
-2. Compute braking distance needed at `a = 1.0 m/s²`: `d = v² ⁄ 2a`.
-3. If `d ≥ distance − 5 m`, command **−0.7** (70 % service brake).
-4. Otherwise, if `v < 60 km/h`, command **+0.7** (70 % traction).
-5. Otherwise, command **0** (coast).
-6. Inside ±1.5 m of the stop point, command **−1.0** (full brake) until
-   stopped.
+1. Take the **latched target station** — the next one ahead in the current
+   direction, skipping the station just served. The latch means creeping a few
+   centimetres past the mark cannot make PA give up on the platform and set off
+   for the next one.
+2. Compute the deceleration that would bring the train to rest on the mark:
+   `a = v² ⁄ 2d`, where `d` is the distance still to run.
+3. If `a ≥ 1.0 m/s²`, brake with the fraction of the service brake that
+   delivers exactly that — `−a ⁄ 1.4`, clamped to **−1.0**. Recomputing it every
+   frame is what makes the stop accurate; a fixed notch held until the train
+   happens to stop leaves it metres short.
+4. Otherwise, if `a ≥ 0.5 m/s²`, command **0** (coast in).
+5. Otherwise, if `v < 60 km/h`, command **+0.7** (70 % traction).
+6. Otherwise, command **0** (cruise).
+7. Inside ±0.05 m of the mark, command **−1.0** (full brake) until stopped.
+
+Step 3 is latched with a Schmitt trigger: once braking, PA keeps braking until
+`a` falls below 0.5 m/s². Braking at exactly the rate the profile asks for pins
+`a` to the trigger point, so a single threshold would chatter the command — and
+with it the FREIN voyant — frame by frame.
+
+Berthing accuracy is about **±0.02 m** from the platform centre, and holds
+after a disturbance (EB trip on the approach, door cycle) — PA re-runs the
+profile from wherever the train ends up.
 
 PA suspends whenever doors open or the EB is latched and resumes when those
 conditions clear.
+
+**Station sequencing.** `SimulationModel.updatePAStationSequence` drives the
+arrival/departure cycle, because the profile above on its own would hold the
+brake forever on the platform it just stopped at:
+
+1. **Berth** — stopping (< 0.1 m/s) inside the ±6 m box of a station not yet
+   served berths the train there; PA holds full brake.
+2. **Dwell** — the berth is held for **10 s**. Opening the doors pauses the
+   dwell; closing them with **FP** ends it at once.
+3. **Depart** — the station is marked served and excluded as a stop target, so
+   the profile picks the next one. The exclusion is released once the train is
+   more than 12 m clear, letting the station be served again after a reverser
+   change.
+
+Turning **PA** off, cutting **KG**, or moving the reverser to **0** resets the
+sequence; a suspension (doors, EB) does not — the berth survives it.
+
+**Terminus.** The last station in the direction of travel *is* the terminus: PA
+stays berthed there and holds the platform rather than running on to the end of
+track. Moving the reverser to the opposite direction releases the berth and PA
+works back down the line. PA engaged where there is no station ahead at all
+simply holds the brake until the reverser is changed.
 
 ### 2.9 Emergency Brake (Frein d'Urgence)
 
@@ -250,6 +287,11 @@ device connected, mouse input on the on-screen pupitre is fully functional.
    next station.
 3. While stopped, operate doors as in §3.3.
 4. After **FP** closes doors, PA picks up driving to the next station.
+5. If you leave the doors shut, PA departs on its own after the 10 s dwell and
+   works the line station by station, berthing within a couple of centimetres
+   of each platform mark.
+6. At the last station in the direction of travel PA stays berthed. Move the
+   reverser to the opposite direction to work back down the line.
 
 ### 3.5 Emergency Stop
 

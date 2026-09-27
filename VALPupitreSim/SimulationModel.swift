@@ -74,6 +74,26 @@ final class SimulationModel {
     @ObservationIgnored private var previousDoorOpenRight: Bool = false
     @ObservationIgnored private var previousDoorClose: Bool = false
 
+    // MARK: PA station sequencing (not observed)
+    /// Station PA is berthed at, nil while running between stations.
+    @ObservationIgnored private var paBerthedStation: Int?
+    /// Seconds left of the station dwell before PA departs.
+    @ObservationIgnored private var paDwellRemaining: Double = 0
+    /// Station PA has already served. Excluded as a stop target so the train
+    /// leaves instead of re-braking onto the platform it is standing at.
+    @ObservationIgnored private var paClearedStation: Int?
+    /// True once PA has begun braking onto the mark. Latched, with a wide
+    /// release band, so the stop profile cannot chatter in and out of the
+    /// brake band frame by frame.
+    @ObservationIgnored private var paBraking: Bool = false
+    /// Station PA is currently driving to. Latched for the whole run so that
+    /// creeping a few centimetres past the mark cannot make PA give up on the
+    /// platform and set off for the next one.
+    @ObservationIgnored private var paTargetStation: Int?
+    /// True once the doors have been opened during the current berth; closing
+    /// them then ends the dwell at once (the guide's FP → departure sequence).
+    @ObservationIgnored private var paDoorsServed: Bool = false
+
     // MARK: Stations
     let stationPositions: [Double] = [250, 750, 1250]
     let stationNames: [String] = ["QUATRE-CANTONS", "RÉPUBLIQUE", "GRAND-PLACE"]
@@ -91,9 +111,9 @@ final class SimulationModel {
 
     // PA profile
     let paCruiseMS: Double = 16.7      // ~60 km/h
-    let paBrakeRate: Double = 1.0      // gentle service brake (m/s²)
-    let paStopMargin: Double = 5       // start braking this far before the stop
-    let paStopTolerance: Double = 1.5
+    let paBrakeRate: Double = 1.0      // deceleration the stop profile aims for (m/s²)
+    let paStopTolerance: Double = 0.05 // "on the mark" band around the platform centre
+    let paDwellTime: Double = 10       // station dwell before PA departs on its own
 
     // MARK: Callbacks (set by ContentView to drive audio events)
     @ObservationIgnored var onDoorChime: (() -> Void)?
@@ -162,6 +182,10 @@ final class SimulationModel {
         previousDoorClose = doorClose
 
         if kacopEdge { deadmanTimer = 0 }
+
+        // Advance the PA station sequence before asking the auto-driver for a
+        // command, so arrival/departure is decided from this frame's state.
+        updatePAStationSequence(dt: dt)
 
         // Choose the controller: in PA mode the auto-driver overrides the
         // user's master-controller value entirely.
@@ -246,31 +270,131 @@ final class SimulationModel {
         }
     }
 
+    // MARK: PA station sequence
+    //
+    // The auto-driver alone cannot leave a platform: once stopped it is still
+    // within the stop zone of the station it just served, so it would command
+    // the brake forever. This little state machine berths the train on
+    // arrival, holds it for a dwell (cut short by a door cycle), then marks
+    // the station served so `computePAController` targets the next one.
+    private func updatePAStationSequence(dt: Double) {
+        // Deselecting PA — or losing power, or going to neutral — drops the
+        // sequence so a later re-engagement re-evaluates from where we are.
+        // A mere suspension (doors open, EB latched) keeps the berth.
+        guard paMode && kg && direction != .neutral else {
+            paBerthedStation = nil
+            paDwellRemaining = 0
+            paClearedStation = nil
+            paDoorsServed = false
+            setPATarget(nil)
+            return
+        }
+
+        if let berthed = paBerthedStation {
+            setPATarget(nil)
+            if doorsAreOpen {
+                paDoorsServed = true            // dwell pauses while doors are out
+            } else {
+                if paDwellRemaining > 0 { paDwellRemaining -= dt }
+                // The doors closing (FP) ends the dwell at once; otherwise it
+                // simply runs out. Either way we only leave if there is
+                // somewhere to go: at a terminus PA holds the platform until
+                // the reverser sends it back down the line.
+                let readyToLeave = paDoorsServed || paDwellRemaining <= 0
+                if readyToLeave, let onward = stationAhead(excluding: berthed) {
+                    paClearedStation = berthed
+                    paBerthedStation = nil
+                    paDwellRemaining = 0
+                    paDoorsServed = false
+                    setPATarget(onward)
+                }
+            }
+            return
+        }
+
+        // Arrival: stopped inside the box of a station we have not served yet.
+        if speedMS < 0.1, let here = currentStationIndex, here != paClearedStation {
+            paBerthedStation = here
+            paDwellRemaining = paDwellTime
+            paDoorsServed = false
+            setPATarget(nil)
+            return
+        }
+
+        // Drop a latched target that has ended up behind us — a reverser
+        // change, or a platform blown through after an EB release.
+        if let target = paTargetStation,
+           aheadDistance(to: target) < -stationTolerance {
+            setPATarget(nil)
+        }
+
+        // Release the served-station lockout once well clear of the platform,
+        // so that station can be a stop target again after a reverser change.
+        if let cleared = paClearedStation,
+           abs(positionM - stationPositions[cleared]) > stationTolerance * 2 {
+            paClearedStation = nil
+        }
+
+        if paTargetStation == nil {
+            setPATarget(stationAhead(excluding: paClearedStation))
+        }
+    }
+
+    /// Point PA at a new stop (or at nothing), resetting the brake latch with
+    /// it so the stop profile is re-entered from scratch for the new run.
+    private func setPATarget(_ station: Int?) {
+        guard paTargetStation != station else { return }
+        paTargetStation = station
+        paBraking = false
+    }
+
+    /// Distance from the train to a station, measured along the direction of
+    /// travel: positive ahead, negative behind.
+    private func aheadDistance(to station: Int) -> Double {
+        let sign: Double = direction == .reverse ? -1 : 1
+        return sign * (stationPositions[station] - positionM)
+    }
+
+    /// Nearest station ahead in the direction of travel, skipping `excluded`.
+    /// `nil` means there is nothing left to serve this way — a terminus.
+    private func stationAhead(excluding excluded: Int?) -> Int? {
+        stationPositions.indices
+            .filter { $0 != excluded && aheadDistance(to: $0) > 0.5 }
+            .min { aheadDistance(to: $0) < aheadDistance(to: $1) }
+    }
+
     // MARK: PA controller
     //
     // Constant-deceleration profile: accelerate up to `paCruiseMS`, coast,
-    // then brake so the train stops within ±`paStopTolerance` m of the next
-    // station ahead in the current direction (or the end of the line).
+    // then brake onto the mark of the latched target station. The brake is
+    // commanded as the *fraction of the service brake that stops the train
+    // there*, recomputed every frame, rather than a fixed notch held until
+    // the train happens to stop — a fixed notch leaves it metres short.
     private func computePAController() -> Double {
-        let sign: Double = direction == .reverse ? -1 : 1
-        let candidates = stationPositions.filter {
-            sign * ($0 - positionM) > 0.5
-        }
-        let target: Double
-        if let next = candidates.min(by: {
-            abs($0 - positionM) < abs($1 - positionM)
-        }) {
-            target = next
-        } else {
-            target = sign > 0 ? trackLengthM - 1 : 1
-        }
-        let dist = abs(target - positionM)
-        let brakeDist = speedMS * speedMS / (2 * paBrakeRate)
+        // Berthed, or nothing left to serve this way: hold the brake.
+        guard paBerthedStation == nil, let target = paTargetStation else { return -1.0 }
 
-        if dist < paStopTolerance {
-            return -1.0
-        } else if brakeDist >= max(0, dist - paStopMargin) {
-            return -0.7
+        // On (or past) the mark: full brake to a standstill.
+        let stopDist = aheadDistance(to: target)
+        if stopDist <= paStopTolerance { return -1.0 }
+
+        // Deceleration that would bring the train to rest on the mark.
+        let decelNeeded = speedMS * speedMS / (2 * stopDist)
+
+        // Schmitt trigger on the stop profile: once braking, keep braking
+        // until well below the profile again. A single threshold chatters,
+        // because braking at exactly the rate the profile asks for holds
+        // `decelNeeded` pinned to the trigger point.
+        if paBraking {
+            if decelNeeded < paBrakeRate * 0.5 { paBraking = false }
+        } else if decelNeeded >= paBrakeRate {
+            paBraking = true
+        }
+
+        if paBraking {
+            return -min(1.0, decelNeeded / maxServiceBrake)
+        } else if decelNeeded >= paBrakeRate * 0.5 {
+            return 0                            // nearly on the profile: coast in
         } else if speedMS < paCruiseMS {
             return 0.7
         } else {

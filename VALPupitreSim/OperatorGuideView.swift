@@ -184,14 +184,28 @@ struct OperatorGuideView: View {
 
     private var paBody: String { """
     En PA, l'**automate de conduite** ignore le manipulateur et applique le profil suivant :
-    1. Identification de la prochaine station dans le sens de marche (ou fin de ligne).
-    2. Calcul de la distance de freinage à `a = 1,0 m/s²` : `d = v² ⁄ 2a`.
-    3. Si `d ≥ distance − 5 m` → 70 % de frein service.
-    4. Sinon, si `v < 60 km/h` → 70 % de traction.
-    5. Sinon → roue libre.
-    6. Dans ±1,5 m du point d'arrêt → frein maximal jusqu'à l'arrêt.
+    1. Station cible **verrouillée** : la prochaine dans le sens de marche, hors station déjà desservie. Le verrou évite qu'un dépassement de quelques centimètres fasse abandonner le quai.
+    2. Calcul de la décélération amenant la rame pile sur la **marque d'arrêt** : `a = v² ⁄ 2d`, `d` étant la distance restante.
+    3. Si `a ≥ 1,0 m/s²` → freinage à la fraction exacte du frein service : `−a ⁄ 1,4`, borné à −1,0. Ce recalcul à chaque image fait la précision de l'arrêt : un cran fixe maintenu jusqu'à l'immobilisation laisse la rame à plusieurs mètres du quai.
+    4. Sinon, si `a ≥ 0,5 m/s²` → roue libre (approche).
+    5. Sinon, si `v < 60 km/h` → 70 % de traction.
+    6. Sinon → roue libre (croisière).
+    7. Dans ±0,05 m de la marque → frein maximal jusqu'à l'arrêt.
 
-    Le PA se **suspend** automatiquement à l'ouverture des portes ou à l'enclenchement du frein d'urgence, et **reprend** dès que les conditions reviennent. La **veille KACOP est bypassée** en PA.
+    L'étape 3 est **verrouillée en hystérésis** : une fois le freinage engagé, il est maintenu jusqu'à ce que `a` retombe sous 0,5 m/s². Freiner exactement à la valeur demandée maintient `a` sur le seuil : un seuil unique ferait osciller la commande — et le voyant **FREIN** — d'une image à l'autre.
+
+    Précision d'accostage : environ **±0,02 m** du centre du quai, y compris après une perturbation (frein d'urgence en approche, cycle de portes) — le profil est simplement rejoué depuis la position atteinte.
+
+    **Enchaînement des stations.** À l'arrêt (< 0,1 m/s) dans la boîte de ±6 m d'une station non desservie, la rame se **gare** à quai, frein maintenu, pour un **stationnement de 10 s** :
+    - l'ouverture des portes **suspend** le décompte ;
+    - **FP** (fermeture) y met fin immédiatement et la rame repart ;
+    - sinon le départ est automatique à l'expiration des 10 s.
+
+    La station desservie est alors exclue des cibles d'arrêt — elle le redevient dès que la rame s'en est éloignée de plus de 12 m, ce qui permet de la desservir à nouveau après inversion du reverseur.
+
+    Le PA se **suspend** automatiquement à l'ouverture des portes ou à l'enclenchement du frein d'urgence, et **reprend** dès que les conditions reviennent, sans perdre la station en cours. Couper **PA**, **KG** ou passer le reverseur sur **0** réinitialise l'enchaînement.
+
+    **Terminus.** La dernière station du sens de marche *est* le terminus : la rame y reste garée, frein maintenu, sans rejoindre la fin de voie. Inverser le reverseur libère le quai et le PA repart en sens inverse. PA engagé sans aucune station devant maintient simplement le frein. La **veille KACOP est bypassée** en PA.
     """ }
 
     private var stationsBody: String { """
