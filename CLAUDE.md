@@ -129,9 +129,3 @@ closure; they don't run their own clocks for simulation.
 - **Cross-platform shims exist despite macOS-only shipping:** `PColor`
   (NSColor/UIColor typealias) and the `#if os(macOS)` HID stub. Keep new
   platform-specific code behind the same guards so the file set keeps compiling.
-
-- **Uncommitted `debugFlags` HUD** in `ContentView.swift` is a temporary raw-state
-  readout (KG/PA/EB/DR/AC, speed, accel, tick count) added to diagnose PA
-  voyant/state mismatches. Treat it as scaffolding to remove, not a fixture.
-</content>
-</invoke>

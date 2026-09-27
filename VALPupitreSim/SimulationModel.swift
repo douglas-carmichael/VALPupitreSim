@@ -119,11 +119,6 @@ final class SimulationModel {
     // MARK: Callbacks (set by ContentView to drive audio events)
     @ObservationIgnored var onDoorChime: (() -> Void)?
 
-    // Debug
-    var debugTickCount: Int = 0
-    var debugLastEffective: Double = 0
-    var debugLastAccel: Double = 0
-
     enum Direction: String, CaseIterable, Hashable {
         case forward = "AV"
         case neutral = "0"
@@ -171,7 +166,6 @@ final class SimulationModel {
     // MARK: Step
 
     func update(dt: Double) {
-        debugTickCount &+= 1
         let kacopEdge = kacop && !previousKacop
         previousKacop = kacop
 
@@ -191,7 +185,6 @@ final class SimulationModel {
         // Choose the controller: in PA mode the auto-driver overrides the
         // user's master-controller value entirely.
         let effective = paActive ? computePAController() : masterController
-        debugLastEffective = effective
 
         if !kg {
             speedMS = max(0, speedMS - rollingResistance * 0.4 * dt)
@@ -225,7 +218,6 @@ final class SimulationModel {
                 voyantFreinage = false
                 voyantUrgence = false
             }
-            debugLastAccel = accel
             speedMS = max(0, min(maxSpeedMS, speedMS + accel * dt))
             advancePosition(dt: dt)
 
