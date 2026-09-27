@@ -46,6 +46,8 @@ struct PupitreView: View {
                              state: $model.kph)
                 ToggleSwitch(label: "PA", helper: "Pilote Auto",
                              state: $model.paMode)
+                ToggleSwitch(label: "NAV", helper: "Navette",
+                             state: $model.paShuttle)
             }
         }
     }

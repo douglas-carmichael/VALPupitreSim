@@ -30,6 +30,7 @@ final class SimulationModel {
     var kibs: Bool = false     // Inhibition Boucle de Sécurité
     var kph: Bool = false      // PHares (headlights)
     var paMode: Bool = false   // Pilote Automatique
+    var paShuttle: Bool = false // NAVette — PA turns back on its own at each terminus
 
     // MARK: KACOP — momentary dead-man acknowledgment (true while held)
     var kacop: Bool = false
@@ -299,8 +300,12 @@ final class SimulationModel {
                 // The doors closing (FP) ends the dwell at once; otherwise it
                 // simply runs out. Either way we only leave if there is
                 // somewhere to go: at a terminus PA holds the platform until
-                // the reverser sends it back down the line.
+                // the reverser sends it back down the line — which NAV does
+                // by itself once the dwell is over.
                 let readyToLeave = paDoorsServed || paDwellRemaining <= 0
+                if readyToLeave, paShuttle, stationAhead(excluding: berthed) == nil {
+                    turnBack()
+                }
                 if readyToLeave, let onward = stationAhead(excluding: berthed) {
                     paClearedStation = berthed
                     paBerthedStation = nil
@@ -338,6 +343,19 @@ final class SimulationModel {
         if paTargetStation == nil {
             setPATarget(stationAhead(excluding: paClearedStation))
         }
+
+        // Nothing ahead at all (engaged past the last platform): PA brakes to
+        // a stand, and under NAV then turns back towards the line.
+        if paTargetStation == nil, paShuttle, speedMS < 0.1 {
+            turnBack()
+            setPATarget(stationAhead(excluding: paClearedStation))
+        }
+    }
+
+    /// NAV turnback: throw the reverser to the opposite direction, exactly as
+    /// the driver would at a terminus. The pupitre's reverser follows it.
+    private func turnBack() {
+        direction = direction == .forward ? .reverse : .forward
     }
 
     /// Point PA at a new stop (or at nothing), resetting the brake latch with

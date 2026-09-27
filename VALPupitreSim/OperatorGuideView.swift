@@ -99,6 +99,7 @@ struct OperatorGuideView: View {
             tableRow("KIBS", "Inhibition Boucle Sécurité", "Bypass BS pour récupération")
             tableRow("KPH", "PHares", "Feux avant")
             tableRow("PA", "Pilote Automatique", "Sélection mode auto / manuel")
+            tableRow("NAV", "NAVette", "Retournement auto aux terminus (écran seul)")
         }
     }
 
@@ -206,6 +207,8 @@ struct OperatorGuideView: View {
     Le PA se **suspend** automatiquement à l'ouverture des portes ou à l'enclenchement du frein d'urgence, et **reprend** dès que les conditions reviennent, sans perdre la station en cours. Couper **PA**, **KG** ou passer le reverseur sur **0** réinitialise l'enchaînement.
 
     **Terminus.** La dernière station du sens de marche *est* le terminus : la rame y reste garée, frein maintenu, sans rejoindre la fin de voie. Inverser le reverseur libère le quai et le PA repart en sens inverse. PA engagé sans aucune station devant maintient simplement le frein. La **veille KACOP est bypassée** en PA.
+
+    **Navette (NAV).** Avec **NAV** activé, le PA effectue lui-même le retournement : à la fin du stationnement au terminus (10 s, ou immédiatement après un cycle de portes **FP**), il inverse le reverseur — celui du pupitre suit — et repart en sens inverse, d'un terminus à l'autre, indéfiniment. Engagé au-delà du dernier quai, il s'arrête, se retourne et dessert d'abord ce quai. Couper NAV en route laisse la rame finir son trajet et se garer au terminus suivant. NAV n'a pas de bouton HID.
     """ }
 
     private var stationsBody: String { """
@@ -271,6 +274,7 @@ struct OperatorGuideView: View {
     - **FP** — *Fermeture Portes*
     - **K-** — préfixe des contacteurs (*contactor*) en symbologie électrique
     - **Manipulateur** — controller / handle
+    - **Navette (NAV)** — service navette entre les deux terminus
     - **PA / PM** — *Pilotage Automatique / Manuel*
     - **PO G / PO D** — *Porte Ouverture Gauche / Droite*
     - **Pupitre** — cab control desk

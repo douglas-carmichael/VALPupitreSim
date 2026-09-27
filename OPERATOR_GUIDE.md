@@ -46,7 +46,7 @@ overrides the master-controller value entirely.
 ### 2.3 K-Series Switches
 
 In French electrical convention, control switches are prefixed `K`
-(for *contacteur*). The pupitre carries four:
+(for *contacteur*). The pupitre carries four, plus the **NAV** selector:
 
 | Symbol | Expansion | Function |
 |--------|-----------|----------|
@@ -54,6 +54,7 @@ In French electrical convention, control switches are prefixed `K`
 | **KIBS** | Inhibition Boucle de Sécurité | Bypasses the safety interlock loop. Required for some recovery moves. |
 | **KPH** | PHares | Headlights. |
 | **PA** | Pilote Automatique | Selects automatic vs manual operation. |
+| **NAV** | NAVette | Shuttle service: PA turns back on its own at each terminus. On-screen only — no HID button. |
 
 ### 2.4 Vigilance Device (KACOP)
 
@@ -183,6 +184,14 @@ track. Moving the reverser to the opposite direction releases the berth and PA
 works back down the line. PA engaged where there is no station ahead at all
 simply holds the brake until the reverser is changed.
 
+**Shuttle (NAV).** With **NAV** on, PA does the turnback itself: once the
+terminus dwell is over (10 s, or at once after an **FP** door cycle) it throws
+the reverser to the opposite direction — the pupitre's reverser follows — and
+works back down the line, end to end, indefinitely. Engaged past the last
+platform, it brakes to a stand, turns back and serves that platform first.
+Turning NAV off mid-run lets the train finish its current leg and hold at the
+next terminus.
+
 ### 2.9 Emergency Brake (Frein d'Urgence)
 
 A latched key-protected mushroom button (**ARRÊT**).
@@ -291,7 +300,9 @@ device connected, mouse input on the on-screen pupitre is fully functional.
    works the line station by station, berthing within a couple of centimetres
    of each platform mark.
 6. At the last station in the direction of travel PA stays berthed. Move the
-   reverser to the opposite direction to work back down the line.
+   reverser to the opposite direction to work back down the line — or flip
+   **NAV** on and PA shuttles between the two termini by itself, reversing
+   after each terminus dwell.
 
 ### 3.5 Emergency Stop
 
@@ -319,6 +330,7 @@ If stopped between stations under PA (e.g. EB has tripped):
 - **K-** — prefix denoting *contacteur* (contactor) in French electrical
   schematics.
 - **Manipulateur** — controller / handle.
+- **Navette (NAV)** — shuttle service between the two termini.
 - **PA / PM** — *Pilotage Automatique / Manuel*.
 - **PO G / PO D** — *Porte Ouverture Gauche / Droite*.
 - **Pupitre** — cab control desk.
