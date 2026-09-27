@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 trainset, on a 1.5 km test track with three stations. It models traction/braking
 physics, the PA (automatic) / PM (manual) driving modes, the KACOP dead-man
 vigilance device, station door interlocks, procedurally-synthesized audio, and a
-SceneKit 3D visualization. A USB HID pupitre (a Raspberry Pi Pico presenting as a
+RealityKit 3D visualization. A USB HID pupitre (a Raspberry Pi Pico presenting as a
 12-button + 1-axis gamepad) can drive it; mouse input on the on-screen controls
 works with no hardware.
 
@@ -45,15 +45,16 @@ these two facts and the rest follows:
 Data flow each frame:
 
 ```
-HID device ─┐                          ┌─→ Train3DView      (SceneKit chase cam)
-mouse/touch ─┼─→ SimulationModel ──────┼─→ TrackOverview3DView (SceneKit top-down map)
+HID device ─┐                          ┌─→ Train3DView      (RealityKit chase cam)
+mouse/touch ─┼─→ SimulationModel ──────┼─→ TrackOverview3DView (RealityKit top-down map)
             (inputs)   │  update(dt:)   ├─→ PupitreView      (on-screen controls + voyants)
                        │                └─→ AudioEngine      (procedural synth)
                        └── single @Observable source of truth ──
 ```
 
-The SceneKit views re-render because their `updateNSView` is re-invoked when the
-`@Observable` model changes; they don't run their own clocks for simulation.
+The RealityKit views read the per-frame model values in `body`, so Observation
+invalidates them when the model changes and `RealityView` re-runs its `update`
+closure; they don't run their own clocks for simulation.
 
 ### Components
 
@@ -71,9 +72,13 @@ The SceneKit views re-render because their `updateNSView` is re-invoked when the
   model state into live parameters once per frame.
 - **`HIDInputManager.swift`** — `IOHIDManager`-based USB input → model
   (macOS-only; there is a non-macOS stub so the file still compiles elsewhere).
-- **`Train3DView.swift`** — SceneKit chase-cam view of the train on the guideway.
-- **`TrackOverview3DView.swift`** — SceneKit orthographic top-down map of the
+- **`Train3DView.swift`** — RealityKit chase-cam view of the train on the guideway.
+- **`TrackOverview3DView.swift`** — RealityKit orthographic top-down map of the
   whole line with a moving rame marker.
+- **`Cab3DView.swift`** — RealityKit from-the-cab view (own window) with a
+  SwiftUI HUD overlay.
+- **`RealityKitSupport.swift`** — shared entity/material/light builders (`RK`)
+  and the `PColor` typealias.
 - **`OperatorGuideView.swift`** — in-app guide sheet (French).
 
 ## Conventions & gotchas
@@ -113,15 +118,17 @@ The SceneKit views re-render because their `updateNSView` is re-invoked when the
   allocation- and lock-free — note the custom xorshift `nextNoise()` exists
   specifically to avoid the locking RNG in `Float.random`.
 
-- **SceneKit views cache nodes in a coordinator** (`SceneCoordinator` /
-  `OverviewCoordinator`) and mutate `simdPosition` per frame in `updateScene`
-  rather than rebuilding the scene graph. Add new animated elements by stashing
-  the node on the coordinator at build time and updating it there.
+- **RealityKit views cache entities in a rig** (`TrainSceneRig` /
+  `OverviewSceneRig` / `CabSceneRig`, held in `@State`), built once in the
+  `RealityView` make closure and mutated per frame in `apply(...)` rather than
+  rebuilding the scene. Add new animated elements by stashing the entity on the
+  rig at build time and updating it there. Only swap materials/components when
+  a value changes (see the headlight handling). RealityKit has no fog, and its
+  orthographic `scale` is a half-extent like SceneKit's `orthographicScale`.
 
 - **Cross-platform shims exist despite macOS-only shipping:** `PColor`
-  (NSColor/UIColor typealias), the `#if os(macOS)` HID stub, and the
-  NS/UIViewRepresentable bridges. Keep new platform-specific code behind the
-  same guards so the file set keeps compiling.
+  (NSColor/UIColor typealias) and the `#if os(macOS)` HID stub. Keep new
+  platform-specific code behind the same guards so the file set keeps compiling.
 
 - **Uncommitted `debugFlags` HUD** in `ContentView.swift` is a temporary raw-state
   readout (KG/PA/EB/DR/AC, speed, accel, tick count) added to diagnose PA

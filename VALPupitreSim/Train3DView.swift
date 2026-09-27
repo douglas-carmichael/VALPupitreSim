@@ -4,35 +4,54 @@
 //
 
 import SwiftUI
-import SceneKit
+import RealityKit
 
-#if canImport(AppKit)
-import AppKit
-typealias PColor = NSColor
-#else
-import UIKit
-typealias PColor = UIColor
-#endif
-
-/// A SceneKit visualization of the VAL 206 train moving down a concrete
+/// A RealityKit visualization of the VAL 206 train moving down a concrete
 /// guideway. Bi-parting passenger doors slide open in sync with
 /// `model.doorsLeftOpenness` / `model.doorsRightOpenness`; the camera trails
 /// the lead car; headlight emission tracks `model.kph`.
 struct Train3DView: View {
     let model: SimulationModel
+    @State private var rig = TrainSceneRig()
 
     var body: some View {
-        SceneRepresentable(model: model)
+        // Read the per-frame inputs in `body` so Observation invalidates this
+        // view whenever they change; RealityView then re-runs `update`.
+        let frame = TrainSceneRig.Frame(
+            positionM: Float(model.positionM),
+            doorsLeftOpenness: Float(model.doorsLeftOpenness),
+            doorsRightOpenness: Float(model.doorsRightOpenness),
+            headlightsOn: model.kph
+        )
+
+        RealityView { content in
+            content.camera = .virtual
+            content.renderingEffects.antialiasing = .multisample4X
+            content.add(rig.makeScene())
+        } update: { _ in
+            rig.apply(frame)
+        }
+        .realityViewCameraControls(.none)
+        .backgroundStyle(Color(red: 0.05, green: 0.06, blue: 0.09))
+        .background(Color(red: 0.05, green: 0.06, blue: 0.09))
     }
 }
 
-/// Persistent references to scene nodes — held by the representable's
-/// coordinator so per-frame updates don't have to walk the scene tree.
-private final class SceneCoordinator {
+/// Builds the scene once and keeps references to the animated entities so
+/// per-frame updates don't have to walk the entity tree.
+@MainActor
+private final class TrainSceneRig {
+    struct Frame {
+        var positionM: Float
+        var doorsLeftOpenness: Float
+        var doorsRightOpenness: Float
+        var headlightsOn: Bool
+    }
+
     enum TrainSide { case driverLeft, driverRight }
 
     struct DoorHalf {
-        let node: SCNNode
+        let entity: Entity
         let baseZ: Float
         let trainSide: TrainSide
         /// Which way this half slides when opening (-Z half slides further -,
@@ -40,114 +59,83 @@ private final class SceneCoordinator {
         let slideDirection: Float
     }
 
-    var trainNode: SCNNode?
-    var cameraNode: SCNNode?
-    var headlightNodes: [SCNNode] = []
-    var doorHalves: [DoorHalf] = []
-}
+    private var train = Entity()
+    private var camera = Entity()
+    private var headlights: [ModelEntity] = []
+    private var doorHalves: [DoorHalf] = []
+    private var headlightsOn: Bool?
 
-private struct SceneRepresentable {
-    let model: SimulationModel
+    private let lampOff = RK.material(PColor(white: 0.95, alpha: 1))
+    private let lampOn = RK.material(PColor(white: 0.95, alpha: 1),
+                                     emissive: .white, emissiveIntensity: 2)
 
     // MARK: Scene construction
 
-    func makeScene(coord: SceneCoordinator) -> SCNScene {
-        let scene = SCNScene()
-        scene.background.contents = PColor(red: 0.05, green: 0.06, blue: 0.09, alpha: 1)
-        scene.fogColor = PColor.black
-        scene.fogStartDistance = 40
-        scene.fogEndDistance = 180
+    func makeScene() -> Entity {
+        let root = Entity()
 
-        let ambient = SCNNode()
-        ambient.light = SCNLight()
-        ambient.light?.type = .ambient
-        ambient.light?.intensity = 380
-        ambient.light?.color = PColor(white: 0.85, alpha: 1)
-        scene.rootNode.addChildNode(ambient)
+        root.addChild(RK.directionalLight(intensity: 1600, castsShadow: true,
+                                          orientation: RK.euler(-.pi / 3, .pi / 5, 0)))
+        // Soft fill from the opposite side stands in for SceneKit's ambient light.
+        root.addChild(RK.directionalLight(intensity: 500, color: PColor(white: 0.85, alpha: 1),
+                                          orientation: RK.euler(-.pi / 4, .pi + .pi / 5, 0)))
 
-        let key = SCNNode()
-        key.light = SCNLight()
-        key.light?.type = .directional
-        key.light?.intensity = 750
-        key.light?.castsShadow = true
-        key.eulerAngles = SCNVector3(-Float.pi / 3, Float.pi / 5, 0)
-        scene.rootNode.addChildNode(key)
+        root.addChild(makeGuideway())
+        root.addChild(makeStations())
 
-        scene.rootNode.addChildNode(makeGuideway())
-        scene.rootNode.addChildNode(makeStations())
-
-        let train = makeTrain(coord: coord)
+        train = makeTrain()
         train.name = "train"
-        coord.trainNode = train
-        scene.rootNode.addChildNode(train)
+        root.addChild(train)
 
-        let camera = SCNNode()
-        camera.camera = SCNCamera()
-        camera.camera?.fieldOfView = 55
-        camera.camera?.zFar = 400
-        camera.position = SCNVector3(3.5, 4.2, 18)
-        camera.eulerAngles = SCNVector3(-0.18, 0.18, 0)
-        coord.cameraNode = camera
-        scene.rootNode.addChildNode(camera)
+        camera = Entity()
+        camera.components.set(PerspectiveCameraComponent(near: 0.1, far: 400,
+                                                         fieldOfViewInDegrees: 55))
+        camera.position = [3.5, 4.2, 18]
+        camera.orientation = RK.euler(-0.18, 0.18, 0)
+        root.addChild(camera)
 
-        return scene
+        return root
     }
 
     // MARK: Guideway
 
-    private func makeGuideway() -> SCNNode {
-        let group = SCNNode()
-        let len: CGFloat = 2000
+    private func makeGuideway() -> Entity {
+        let group = Entity()
+        let len: Float = 2000
+        let midZ = -len / 2 + 20
 
-        let slab = SCNBox(width: 5.2, height: 0.25, length: len, chamferRadius: 0)
-        slab.firstMaterial?.diffuse.contents = PColor(white: 0.32, alpha: 1)
-        let slabNode = SCNNode(geometry: slab)
-        slabNode.position = SCNVector3(0, -0.7, -Float(len / 2) + 20)
-        group.addChildNode(slabNode)
+        RK.add(RK.box(5.2, 0.25, len, RK.material(PColor(white: 0.32, alpha: 1))),
+               to: group, at: [0, -0.7, midZ])
 
         // Central guide rail — the VAL trademark central beam
-        let rail = SCNBox(width: 0.18, height: 0.22, length: len, chamferRadius: 0)
-        rail.firstMaterial?.diffuse.contents = PColor.systemYellow
-        let railNode = SCNNode(geometry: rail)
-        railNode.position = SCNVector3(0, -0.45, -Float(len / 2) + 20)
-        group.addChildNode(railNode)
+        RK.add(RK.box(0.18, 0.22, len, RK.material(.systemYellow)),
+               to: group, at: [0, -0.45, midZ])
 
         // Curbs the rubber tires roll on
-        for x in [-1.7, 1.7] {
-            let curb = SCNBox(width: 0.6, height: 0.08, length: len, chamferRadius: 0)
-            curb.firstMaterial?.diffuse.contents = PColor(white: 0.45, alpha: 1)
-            let n = SCNNode(geometry: curb)
-            n.position = SCNVector3(Float(x), -0.52, -Float(len / 2) + 20)
-            group.addChildNode(n)
+        for x: Float in [-1.7, 1.7] {
+            RK.add(RK.box(0.6, 0.08, len, RK.material(PColor(white: 0.45, alpha: 1))),
+                   to: group, at: [x, -0.52, midZ])
         }
 
-        for x in [-3.2, 3.2] {
-            let wall = SCNBox(width: 0.2, height: 3.0, length: len, chamferRadius: 0)
-            wall.firstMaterial?.diffuse.contents = PColor(white: 0.18, alpha: 1)
-            let n = SCNNode(geometry: wall)
-            n.position = SCNVector3(Float(x), 0.9, -Float(len / 2) + 20)
-            group.addChildNode(n)
+        for x: Float in [-3.2, 3.2] {
+            RK.add(RK.box(0.2, 3.0, len, RK.material(PColor(white: 0.18, alpha: 1))),
+                   to: group, at: [x, 0.9, midZ])
         }
 
+        let stripeMat = RK.material(.white)
         for m in stride(from: 0, through: 1500, by: 50) {
-            let stripe = SCNBox(width: 1.0, height: 0.01, length: 0.25, chamferRadius: 0)
-            stripe.firstMaterial?.diffuse.contents = PColor.white
-            let s = SCNNode(geometry: stripe)
-            s.position = SCNVector3(0, -0.56, -Float(m))
-            group.addChildNode(s)
+            RK.add(RK.box(1.0, 0.01, 0.25, stripeMat), to: group, at: [0, -0.56, -Float(m)])
         }
         return group
     }
 
-    private func makeStations() -> SCNNode {
-        let group = SCNNode()
+    private func makeStations() -> Entity {
+        let group = Entity()
+        let mat = RK.material(PColor(white: 0.55, alpha: 1))
         for m in stride(from: 250, through: 1500, by: 500) {
-            for side in [-1, 1] {
-                let platform = SCNBox(width: 1.5, height: 1.1, length: 40, chamferRadius: 0.05)
-                platform.firstMaterial?.diffuse.contents = PColor(white: 0.55, alpha: 1)
-                let n = SCNNode(geometry: platform)
-                n.position = SCNVector3(Float(side) * 2.6, -0.1, -Float(m))
-                group.addChildNode(n)
+            for side: Float in [-1, 1] {
+                RK.add(RK.box(1.5, 1.1, 40, cornerRadius: 0.05, mat),
+                       to: group, at: [side * 2.6, -0.1, -Float(m)])
             }
         }
         return group
@@ -155,93 +143,60 @@ private struct SceneRepresentable {
 
     // MARK: Train
 
-    private func makeTrain(coord: SceneCoordinator) -> SCNNode {
-        let train = SCNNode()
+    private func makeTrain() -> Entity {
+        let train = Entity()
         for i in 0..<2 {
-            let car = makeCar(isLead: i == 0, carIndex: i, coord: coord)
-            car.position = SCNVector3(0, 0, Float(i) * 13.2)
-            train.addChildNode(car)
+            let car = makeCar(isLead: i == 0)
+            car.position = [0, 0, Float(i) * 13.2]
+            train.addChild(car)
         }
         return train
     }
 
-    private func makeCar(isLead: Bool, carIndex: Int, coord: SceneCoordinator) -> SCNNode {
-        let car = SCNNode()
+    private func makeCar(isLead: Bool) -> Entity {
+        let car = Entity()
 
-        let body = SCNBox(width: 2.06, height: 2.4, length: 12.8, chamferRadius: 0.25)
-        body.firstMaterial?.diffuse.contents = PColor.white
-        let bodyNode = SCNNode(geometry: body)
-        bodyNode.position = SCNVector3(0, 0.7, 0)
-        car.addChildNode(bodyNode)
+        RK.add(RK.box(2.06, 2.4, 12.8, cornerRadius: 0.25, RK.material(.white)),
+               to: car, at: [0, 0.7, 0])
 
-        let stripe = SCNBox(width: 2.08, height: 0.35, length: 12.8, chamferRadius: 0)
-        stripe.firstMaterial?.diffuse.contents = PColor.systemGreen
-        let stripeNode = SCNNode(geometry: stripe)
-        stripeNode.position = SCNVector3(0, -0.05, 0)
-        car.addChildNode(stripeNode)
+        RK.add(RK.box(2.08, 0.35, 12.8, RK.material(.systemGreen)),
+               to: car, at: [0, -0.05, 0])
 
         // Window band
-        for side in [-1.04, 1.04] {
-            let band = SCNBox(width: 0.02, height: 0.85, length: 11.5, chamferRadius: 0.05)
-            let mat = SCNMaterial()
-            mat.diffuse.contents = PColor(white: 0.12, alpha: 1)
-            mat.specular.contents = PColor.white
-            mat.shininess = 0.6
-            band.firstMaterial = mat
-            let n = SCNNode(geometry: band)
-            n.position = SCNVector3(Float(side), 1.05, 0)
-            car.addChildNode(n)
+        let glass = RK.material(PColor(white: 0.12, alpha: 1), roughness: 0.2)
+        for side: Float in [-1.04, 1.04] {
+            RK.add(RK.box(0.02, 0.85, 11.5, cornerRadius: 0.05, glass),
+                   to: car, at: [side, 1.05, 0])
         }
 
         // Three bi-parting door pairs per car, on each side
-        for zCenter in stride(from: -4.5, through: 4.5, by: 4.5) {
-            for sideX in [-1.045, 1.045] {
-                let trainSide: SceneCoordinator.TrainSide =
-                    sideX < 0 ? .driverLeft : .driverRight
+        let doorMat = RK.material(PColor(white: 0.78, alpha: 1))
+        for zCenter in stride(from: Float(-4.5), through: 4.5, by: 4.5) {
+            for sideX: Float in [-1.045, 1.045] {
+                let trainSide: TrainSide = sideX < 0 ? .driverLeft : .driverRight
 
                 // Each pair = two halves of length 0.55, originally centered at zCenter
-                let halfLen: CGFloat = 0.55
+                let halfLen: Float = 0.55
                 let inset: Float = 0.3
 
-                for slide in [Float(-1), Float(1)] {
-                    let door = SCNBox(width: 0.018, height: 1.9,
-                                      length: halfLen, chamferRadius: 0)
-                    door.firstMaterial?.diffuse.contents = PColor(white: 0.78, alpha: 1)
-                    let n = SCNNode(geometry: door)
-                    let baseZ = Float(zCenter) + slide * inset
-                    n.position = SCNVector3(Float(sideX), 0.6, baseZ)
-                    car.addChildNode(n)
-                    coord.doorHalves.append(.init(
-                        node: n,
-                        baseZ: baseZ,
-                        trainSide: trainSide,
-                        slideDirection: slide
-                    ))
+                for slide: Float in [-1, 1] {
+                    let baseZ = zCenter + slide * inset
+                    let door = RK.add(RK.box(0.018, 1.9, halfLen, doorMat),
+                                      to: car, at: [sideX, 0.6, baseZ])
+                    doorHalves.append(.init(entity: door, baseZ: baseZ,
+                                            trainSide: trainSide, slideDirection: slide))
                 }
             }
         }
 
         if isLead {
-            let ws = SCNBox(width: 1.7, height: 0.9, length: 0.02, chamferRadius: 0.05)
-            let wsMat = SCNMaterial()
-            wsMat.diffuse.contents = PColor(white: 0.1, alpha: 1)
-            wsMat.specular.contents = PColor.white
-            wsMat.shininess = 0.8
-            ws.firstMaterial = wsMat
-            let wsNode = SCNNode(geometry: ws)
-            wsNode.position = SCNVector3(0, 1.35, -6.41)
-            car.addChildNode(wsNode)
+            RK.add(RK.box(1.7, 0.9, 0.02, cornerRadius: 0.05,
+                          RK.material(PColor(white: 0.1, alpha: 1), roughness: 0.15)),
+                   to: car, at: [0, 1.35, -6.41])
 
-            for x in [-0.65, 0.65] {
-                let lamp = SCNSphere(radius: 0.13)
-                let m = SCNMaterial()
-                m.diffuse.contents = PColor(white: 0.95, alpha: 1)
-                m.emission.contents = PColor.black
-                lamp.firstMaterial = m
-                let n = SCNNode(geometry: lamp)
-                n.position = SCNVector3(Float(x), 0.35, -6.42)
-                car.addChildNode(n)
-                coord.headlightNodes.append(n)
+            for x: Float in [-0.65, 0.65] {
+                let lamp = RK.add(RK.sphere(radius: 0.13, lampOff), to: car, at: [x, 0.35, -6.42])
+                headlights.append(lamp)
             }
         }
         return car
@@ -249,67 +204,24 @@ private struct SceneRepresentable {
 
     // MARK: Per-frame update
 
-    func updateScene(coord: SceneCoordinator) {
-        let z = Float(-model.positionM)
-        coord.trainNode?.simdPosition = SIMD3<Float>(0, 0, z)
-        coord.cameraNode?.simdPosition = SIMD3<Float>(3.5, 4.2, z + 18)
+    func apply(_ frame: Frame) {
+        let z = -frame.positionM
+        train.position = [0, 0, z]
+        camera.position = [3.5, 4.2, z + 18]
 
-        let openL = Float(model.doorsLeftOpenness)
-        let openR = Float(model.doorsRightOpenness)
         let slideDistance: Float = 0.55
-
-        for half in coord.doorHalves {
-            let openness = (half.trainSide == .driverLeft) ? openL : openR
-            let newZ = half.baseZ + half.slideDirection * openness * slideDistance
-            var sp = half.node.simdPosition
-            sp.z = newZ
-            half.node.simdPosition = sp
+        for half in doorHalves {
+            let openness = half.trainSide == .driverLeft
+                ? frame.doorsLeftOpenness : frame.doorsRightOpenness
+            half.entity.position.z = half.baseZ + half.slideDirection * openness * slideDistance
         }
 
-        let on = model.kph
-        for lamp in coord.headlightNodes {
-            lamp.geometry?.firstMaterial?.emission.contents =
-                on ? PColor(white: 1, alpha: 1) : PColor.black
+        // Swap lamp materials only on change — replacing materials every frame
+        // would force needless GPU resource updates.
+        if headlightsOn != frame.headlightsOn {
+            headlightsOn = frame.headlightsOn
+            let mat = frame.headlightsOn ? lampOn : lampOff
+            for lamp in headlights { lamp.model?.materials = [mat] }
         }
     }
 }
-
-// MARK: - Platform bridges
-
-#if canImport(AppKit)
-extension SceneRepresentable: NSViewRepresentable {
-    func makeCoordinator() -> SceneCoordinator { SceneCoordinator() }
-    func makeNSView(context: Context) -> SCNView {
-        let v = SCNView()
-        v.scene = makeScene(coord: context.coordinator)
-        v.allowsCameraControl = false
-        v.autoenablesDefaultLighting = false
-        v.antialiasingMode = .multisampling4X
-        v.preferredFramesPerSecond = 60
-        v.isPlaying = true
-        v.backgroundColor = .black
-        return v
-    }
-    func updateNSView(_ view: SCNView, context: Context) {
-        updateScene(coord: context.coordinator)
-    }
-}
-#else
-extension SceneRepresentable: UIViewRepresentable {
-    func makeCoordinator() -> SceneCoordinator { SceneCoordinator() }
-    func makeUIView(context: Context) -> SCNView {
-        let v = SCNView()
-        v.scene = makeScene(coord: context.coordinator)
-        v.allowsCameraControl = false
-        v.autoenablesDefaultLighting = false
-        v.antialiasingMode = .multisampling4X
-        v.preferredFramesPerSecond = 60
-        v.isPlaying = true
-        v.backgroundColor = .black
-        return v
-    }
-    func updateUIView(_ view: SCNView, context: Context) {
-        updateScene(coord: context.coordinator)
-    }
-}
-#endif
