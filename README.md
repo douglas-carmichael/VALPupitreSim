@@ -182,9 +182,15 @@ New state should use the real VAL cab labels listed in the guide's glossary.
 
 ## Acknowledgments
 
-The switch nomenclature and desk layout follow the electronics build-log video
-that inspired the project. VAL is a system originally developed by Matra
-Transport. This is an independent hobby project and isn't affiliated with or
+This project was inspired by **La Patate Douce**'s video
+[*Pupitre VAL 206 : Simulation de conduite manuelle*](https://www.youtube.com/watch?v=U4T-fxTc7go).
+In it, they demo a VAL 206 pupitre replica they built from scratch and linked
+to a simulator, including an emergency-brake recovery under manual control
+and the train running in automatic mode. The switch nomenclature, desk layout
+and default HID mapping here follow that pupitre.
+
+VAL is a system originally developed by Matra Transport, now part of Siemens
+Mobility. This is an independent hobby project and isn't affiliated with or
 endorsed by the system's manufacturers or operators.
 
 ## License

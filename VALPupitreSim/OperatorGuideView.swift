@@ -144,7 +144,7 @@ struct OperatorGuideView: View {
     private var introBody: String { """
     Le **VAL** (*Véhicule Automatique Léger*) est un métro automatique sur pneumatiques conçu par **Matra Transport** pour Lille en 1983. Le **VAL 206** doit son nom à la largeur de ses caisses : **2,06 m**.
 
-    Ce simulateur reproduit le **pupitre de conduite manuelle** d'une rame VAL 206, sur un tronçon de 1,5 km comportant trois stations. La nomenclature et les contacteurs suivent ceux du pupitre réel décrit dans le journal de fabrication électronique (PCB).
+    Ce simulateur reproduit le **pupitre de conduite manuelle** d'une rame VAL 206, sur un tronçon de 1,5 km comportant trois stations. La nomenclature et les contacteurs suivent ceux de la réplique de pupitre présentée par **La Patate Douce** dans la vidéo [*Pupitre VAL 206 : Simulation de conduite manuelle*](https://www.youtube.com/watch?v=U4T-fxTc7go), qui a inspiré le projet.
     """ }
 
     private var theoryBody: String { """
@@ -266,7 +266,7 @@ struct OperatorGuideView: View {
     private var hidBody: String { """
     Le simulateur ouvre automatiquement tout périphérique HID détecté par `IOHIDManager` (joystick, gamepad, contrôleur multi-axes).
 
-    Le **pupitre matériel** décrit dans la vidéo de fabrication — Raspberry Pi Pico configuré en HID gamepad à 12 boutons + 1 axe — est ainsi compatible *plug & play* avec ce mapping par défaut.
+    Un **pupitre matériel** comme celui de la vidéo de La Patate Douce (§1) — Raspberry Pi Pico configuré en HID gamepad à 12 boutons + 1 axe — est ainsi compatible *plug & play* avec ce mapping par défaut.
 
     Comportement des entrées :
     - **Boutons 1, 3, 4** (KG, KIBS, KPH) suivent le *niveau* du bouton : l'interrupteur est fermé tant que l'entrée est maintenue — à câbler sur des interrupteurs à accrochage.

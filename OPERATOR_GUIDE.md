@@ -33,8 +33,10 @@ from the body width of its vehicles: **2.06 m**.
 
 This simulator reproduces the **manual-driving cab** (*pupitre de conduite
 manuelle*) of a VAL 206 trainset, on a 1.5 km test track with three stations.
-The switch nomenclature and pupitre layout follow those discussed in the
-electronics build-log video that motivated the project.
+The switch nomenclature and pupitre layout follow the replica pupitre shown
+in **La Patate Douce**'s video
+[*Pupitre VAL 206 : Simulation de conduite manuelle*](https://www.youtube.com/watch?v=U4T-fxTc7go),
+which inspired the project.
 
 ---
 
@@ -262,9 +264,9 @@ Mute and unmute with the speaker button in the status bar.
 ### 2.12 USB HID Input
 
 The simulator opens any HID joystick / gamepad / multi-axis controller it
-detects through `IOHIDManager`. The Raspberry Pi Pico-based pupitre described
-in the build-log video, presented as a 12-button + 1-axis HID gamepad, is
-plug-and-play compatible with the default mapping:
+detects through `IOHIDManager`. A Raspberry Pi Pico-based pupitre like the one
+in La Patate Douce's video (see §1), presented as a 12-button + 1-axis HID
+gamepad, is plug-and-play compatible with the default mapping:
 
 | HID input | Simulator function |
 |-----------|--------------------|
