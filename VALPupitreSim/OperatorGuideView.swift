@@ -96,7 +96,7 @@ struct OperatorGuideView: View {
                 .foregroundStyle(.yellow)
             tableRow("Symbole", "Expansion", "Fonction", header: true)
             tableRow("KG", "Coupure Générale", "Alimentation maître")
-            tableRow("KIBS", "Inhibition Boucle Sécurité", "Bypass BS pour récupération")
+            tableRow("KIBS", "Inhibition Boucle Sécurité", "Bypass BS (non simulé)")
             tableRow("KPH", "PHares", "Feux avant")
             tableRow("PA", "Pilote Automatique", "Sélection mode auto / manuel")
             tableRow("NAV", "NAVette", "Retournement auto aux terminus (écran seul)")
@@ -180,7 +180,11 @@ struct OperatorGuideView: View {
     - le frein d'urgence est enclenché,
     - ou **KG** est ouvert.
 
-    Le freinage service reste toujours disponible.
+    Le freinage service n'est **pas** soumis à ces verrouillages : il reste disponible portes ouvertes, reverseur sur 0, etc.
+
+    **KG** ouvert, la rame n'est plus alimentée : ni le frein service ni le frein d'urgence n'agissent, la rame ralentit seulement sur la résistance résiduelle (≈ 0,05 m/s²).
+
+    **KIBS** figure au pupitre mais n'est pas encore simulé : il est sans effet.
     """ }
 
     private var paBody: String { """
@@ -222,7 +226,7 @@ struct OperatorGuideView: View {
     - vitesse < 0,1 m/s,
     - à ±6 m du centre de la station.
 
-    L'interverrouillage **interdit la traction** tant qu'une porte est ouverte. Animation d'ouverture/fermeture : ≈ 0,9 s, accompagnée d'un carillon (Audio §9).
+    L'interverrouillage **interdit la traction** tant qu'une porte est ouverte. Animation d'ouverture/fermeture : ≈ 0,9 s, accompagnée d'un carillon (Audio §9). Si la rame se met tout de même en mouvement (> 0,3 m/s, p. ex. en dérive KG ouvert), les portes se referment d'elles-mêmes.
     """ }
 
     private var kacopBody: String { """
@@ -231,6 +235,7 @@ struct OperatorGuideView: View {
     En PM, un appui est requis **au moins toutes les 14 secondes**. Le système ne reconnaît que le **front montant** — un bouton coincé est sans effet.
 
     - Appui ⇒ `deadmanTimer = 0`
+    - Le décompte ne court qu'en marche en PM : KG fermé, reverseur hors 0, vitesse > 0,5 m/s (≈ 1,8 km/h). Sinon il redescend deux fois plus vite.
     - **14 s** : alerte rouge + buzzer 1500 Hz porté par carré 4 Hz
     - **20 s** : frein d'urgence automatique
     - **PA** : veille désactivée
@@ -243,25 +248,31 @@ struct OperatorGuideView: View {
     - **Inhibe toute traction**, quel que soit le manipulateur.
     - **Nouvel appui** : déverrouillage.
 
-    Déclenché aussi automatiquement par expiration du KACOP (> 20 s) en mode manuel.
+    Déclenché aussi automatiquement par expiration du KACOP (> 20 s) en mode manuel. Comme le frein service, il n'agit que **KG** fermé.
     """ }
 
     private var audioBody: String { """
     Tous les sons sont **synthétisés en temps réel** par un unique `AVAudioSourceNode` :
-    - **Moteur** : triangle bi-harmonique, fondamentale 32 → 352 Hz selon vitesse.
-    - **Frein** : bruit blanc filtré passe-bas.
+    - **Moteur** : triangle bi-harmonique, fondamentale 32 → 352 Hz selon vitesse ; amplitude croissante avec la vitesse, +25 % en traction.
+    - **Frein** : bruit blanc filtré passe-bas, plus fort selon la demande de freinage, maximal en urgence.
     - **Klaxon (AVA)** : 220 Hz + harmonique 1,5×.
     - **Compresseur** : sinusoïde 55 Hz tant que KG est on.
     - **Veille** : 1500 Hz porté par carré 4 Hz (alerte uniquement).
-    - **Carillon portes** : enveloppe sinus 660 Hz.
+    - **Carillon portes** : sinus 660 Hz décroissant, au début de chaque ouverture ou fermeture.
 
-    Sortie limitée doucement par `tanh`. Coupure / réactivation via le bouton 🔊 dans la barre d'état.
+    Sortie limitée doucement par `tanh`. Coupure / réactivation via le bouton haut-parleur dans la barre d'état.
     """ }
 
     private var hidBody: String { """
     Le simulateur ouvre automatiquement tout périphérique HID détecté par `IOHIDManager` (joystick, gamepad, contrôleur multi-axes).
 
     Le **pupitre matériel** décrit dans la vidéo de fabrication — Raspberry Pi Pico configuré en HID gamepad à 12 boutons + 1 axe — est ainsi compatible *plug & play* avec ce mapping par défaut.
+
+    Comportement des entrées :
+    - **Boutons 1, 3, 4** (KG, KIBS, KPH) suivent le *niveau* du bouton : l'interrupteur est fermé tant que l'entrée est maintenue — à câbler sur des interrupteurs à accrochage.
+    - **Boutons 2, 5 à 8** (KACOP, klaxon, portes) sont momentanés ; KACOP et les portes n'agissent que sur le front montant.
+    - **Boutons 9 à 11** positionnent le reverseur à l'appui.
+    - **Bouton 12** bascule le frein d'urgence à chaque appui.
 
     Le nom du périphérique connecté s'affiche dans la barre d'état (« PUPITRE USB : … »). Sans pupitre, le pilotage à la souris reste possible sur tous les contrôles virtuels.
     """ }

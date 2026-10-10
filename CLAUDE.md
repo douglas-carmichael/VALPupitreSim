@@ -104,7 +104,9 @@ closure; they don't run their own clocks for simulation.
 
 - **Interlocks are asymmetric and load-bearing:** traction is inhibited when KG
   is off, the reverser is neutral, the emergency brake is latched, or any door
-  is > 2% open — but **service braking is always available**. Doors only operate
+  is > 2% open — but **service braking is outside that gate** (it works with
+  doors open, in neutral, etc.). With KG off, though, no braking acts at all;
+  the train only drifts down on residual resistance. Doors only operate
   when stopped (< 0.1 m/s) at a station with KG on. Don't "simplify" these into
   a single gate.
 

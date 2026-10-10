@@ -5,6 +5,23 @@
 This document is the source-of-truth reference for the in-app guide (see
 `OperatorGuideView.swift`). Update both together.
 
+## Contents
+
+1. [Introduction](#1-introduction)
+2. [Theory of Operation](#2-theory-of-operation)
+   - [2.1 Vehicle](#21-vehicle) · [2.2 Operating Modes](#22-operating-modes) ·
+     [2.3 K-Series Switches](#23-k-series-switches) ·
+     [2.4 Vigilance Device (KACOP)](#24-vigilance-device-kacop)
+   - [2.5 Master Controller](#25-master-controller-manipulateur-tf) ·
+     [2.6 Reverser](#26-reverser-manipulateur-dinversion) ·
+     [2.7 Stations & Doors](#27-stations--doors) ·
+     [2.8 PA Control Profile](#28-pa-control-profile)
+   - [2.9 Emergency Brake](#29-emergency-brake-frein-durgence) ·
+     [2.10 Voyants](#210-voyants-indicator-lights) · [2.11 Audio](#211-audio) ·
+     [2.12 USB HID Input](#212-usb-hid-input) · [2.13 Displays](#213-displays)
+3. [Operating Procedures](#3-operating-procedures)
+4. [Glossary](#4-glossary)
+
 ---
 
 ## 1. Introduction
@@ -51,7 +68,7 @@ In French electrical convention, control switches are prefixed `K`
 | Symbol | Expansion | Function |
 |--------|-----------|----------|
 | **KG** | Coupure Générale | Master power isolation. Without KG no traction or auxiliaries. |
-| **KIBS** | Inhibition Boucle de Sécurité | Bypasses the safety interlock loop. Required for some recovery moves. |
+| **KIBS** | Inhibition Boucle de Sécurité | On a real VAL, bypasses the safety interlock loop for some recovery moves. Present on the pupitre but not yet simulated — it has no effect. |
 | **KPH** | PHares | Headlights. |
 | **PA** | Pilote Automatique | Selects automatic vs manual operation. |
 | **NAV** | NAVette | Shuttle service: PA turns back on its own at each terminus. On-screen only — no HID button. |
@@ -67,6 +84,9 @@ every 14 seconds**. The system detects the **rising edge** of the press
 requirement.
 
 - Acknowledgment → `deadmanTimer = 0`
+- The timer only counts while the train is *running* under manual control:
+  KG on, reverser out of neutral, speed above 0.5 m/s (≈ 1.8 km/h). Otherwise
+  it winds back down at twice the rate.
 - **14 s** of running without acknowledgment: vigilance warning (red ring +
   1500 Hz buzzer gated at 4 Hz).
 - **20 s**: emergency brake automatically applied.
@@ -88,7 +108,12 @@ Traction is inhibited when any of the following is true:
 - the emergency brake is latched,
 - any passenger door is more than 2 % open.
 
-Service braking is always available regardless of KG.
+Service braking is **not** subject to these traction interlocks: it works with
+the doors open, the reverser in neutral, and so on.
+
+With **KG off** the train is unpowered. Neither the service brake nor the
+emergency brake acts, and the train only drifts to a stop on residual
+resistance (≈ 0.05 m/s²).
 
 ### 2.6 Reverser (Manipulateur d'Inversion)
 
@@ -128,7 +153,10 @@ When met, the **DOORS OK** indicator on the pupitre lights green.
 | **PO D** | Porte Ouverture Droite (open driver's right) |
 | **FP** | Fermeture Portes (close all doors) |
 
-Doors animate over 0.9 s. Traction is interlocked while any door is open.
+Doors animate over 0.9 s, with a chime when they start to open or close.
+Traction is interlocked while any door is open. If the train moves off
+anyway (above 0.3 m/s, e.g. drifting with KG off), the doors close by
+themselves.
 
 ### 2.8 PA Control Profile
 
@@ -200,6 +228,7 @@ A latched key-protected mushroom button (**ARRÊT**).
   hiss runs at maximum amplitude, traction inhibited.
 - Second press: brake released.
 - Also auto-applied when the dead-man timer exceeds 20 s in PM.
+- Like the service brake, it needs **KG** on to act (see §2.5).
 
 ### 2.10 Voyants (Indicator Lights)
 
@@ -220,15 +249,15 @@ audio samples shipped:
 
 | Voice | Synthesis |
 |-------|-----------|
-| Motor whine | Dual-harmonic triangle wave; fundamental 32 → 352 Hz with speed; amplitude scales with traction request. |
-| Brake hiss | Low-pass-filtered XOR-shift noise. |
+| Motor whine | Dual-harmonic triangle wave. The fundamental runs 32 → 352 Hz with speed, and the amplitude rises with speed, boosted 25 % while traction is commanded. |
+| Brake hiss | Low-pass-filtered XOR-shift noise, louder with brake demand and loudest under the emergency brake. |
 | Horn (AVA) | 220 Hz fundamental + 1.5× harmonic. |
 | Compressor | 55 Hz sine while KG is on. |
 | Vigilance buzzer | 1500 Hz sine gated at 4 Hz, only during dead-man warning. |
-| Door chime | 660 Hz sine envelope on every door-state transition. |
+| Door chime | 660 Hz decaying sine when doors start to open or close. |
 
 Output is soft-clipped through `tanh` to protect speakers at full output.
-Master mute via the 🔊 button in the status bar.
+Mute and unmute with the speaker button in the status bar.
 
 ### 2.12 USB HID Input
 
@@ -253,8 +282,33 @@ plug-and-play compatible with the default mapping:
 | Button 12 | Emergency Brake (toggle) |
 | Y axis | Master Controller — stick forward = +traction |
 
-Connected device name appears in the HUD beside `PUPITRE USB:`. With no
-device connected, mouse input on the on-screen pupitre is fully functional.
+How each input behaves:
+
+- **Buttons 1, 3, 4** (KG, KIBS, KPH) follow the button *level*: the switch
+  is on for as long as the input is held. Wire them to latching switches.
+- **Buttons 2, 5–8** (KACOP, horn, doors) are momentary. KACOP and the door
+  buttons act on the press edge only.
+- **Buttons 9–11** set the reverser position on press.
+- **Button 12** toggles the emergency brake on each press.
+
+The connected device's name appears in the HUD beside `PUPITRE USB:`. With
+no device connected, mouse input on the on-screen pupitre is fully
+functional.
+
+### 2.13 Displays
+
+The main window, from top to bottom:
+
+| Area | Shows |
+|------|-------|
+| Status bar | Position, speed (km/h), master-controller value, the **PA** badge (**PA STBY** when PA is selected but suspended), the mute button and the reverser position. Also holds the guide (📖) and **VUE CABINE** buttons. |
+| Station bar | Current station or next stop and its distance, the USB pupitre status, and a **VIGILANCE** alert during a dead-man warning. |
+| Track overview | Top-down map of the whole line with the train marker. |
+| Chase camera | 3D view of the train on the guideway. Headlights follow **KPH**. |
+| Pupitre | The control desk: switches, reverser, master controller, voyants, push buttons, KACOP, speedometer and emergency brake. |
+
+**VUE CABINE** opens a separate window with the driver's-eye view and a HUD
+overlay.
 
 ---
 
