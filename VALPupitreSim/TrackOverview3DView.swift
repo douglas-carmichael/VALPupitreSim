@@ -28,11 +28,16 @@ struct TrackOverview3DView: View {
             content.camera = .virtual
             content.renderingEffects.antialiasing = .multisample4X
             content.add(rig.makeScene(layout: layout))
-        } update: { _ in
+        } update: { content in
+            // A different line is a different map: swap it inside the same
+            // view. Recreating the RealityView (`.id`) gives it a new Metal
+            // layer, whose drawables can fail to allocate and leave it black.
+            if rig.layoutID != layout.id {
+                content.entities.removeAll()
+                content.add(rig.makeScene(layout: layout))
+            }
             rig.apply(positionM: positionM, direction: direction, otherRames: otherRames)
         }
-        // A different line is a different map: rebuild it.
-        .id(layout.id)
         .realityViewCameraControls(.none)
         .backgroundStyle(Color(red: 0.04, green: 0.05, blue: 0.08))
         .background(Color(red: 0.04, green: 0.05, blue: 0.08))
@@ -62,7 +67,11 @@ private final class OverviewSceneRig {
 
     // MARK: Scene construction
 
+    /// The line the map was last built for.
+    private(set) var layoutID: String?
+
     func makeScene(layout: TrackLayout) -> Entity {
+        layoutID = layout.id
         let root = Entity()
         self.root = root
         otherMarkers = []

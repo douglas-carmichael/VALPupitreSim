@@ -32,11 +32,16 @@ struct Train3DView: View {
             content.camera = .virtual
             content.renderingEffects.antialiasing = .multisample4X
             content.add(rig.makeScene(layout: layout))
-        } update: { _ in
+        } update: { content in
+            // A different line is a different scene: swap it inside the same
+            // view. Recreating the RealityView (`.id`) gives it a new Metal
+            // layer, whose drawables can fail to allocate and leave it black.
+            if rig.layoutID != layout.id {
+                content.entities.removeAll()
+                content.add(rig.makeScene(layout: layout))
+            }
             rig.apply(frame)
         }
-        // A different line is a different scene: rebuild it.
-        .id(layout.id)
         .realityViewCameraControls(.none)
         .backgroundStyle(Color(red: 0.05, green: 0.06, blue: 0.09))
         .background(Color(red: 0.05, green: 0.06, blue: 0.09))
@@ -87,7 +92,11 @@ private final class TrainSceneRig {
 
     // MARK: Scene construction
 
+    /// The line the scene was last built for.
+    private(set) var layoutID: String?
+
     func makeScene(layout: TrackLayout) -> Entity {
+        layoutID = layout.id
         track = layout.isLoop
             ? CircleSceneTrack(length: Float(layout.lengthM))
             : StraightSceneTrack(length: Float(layout.lengthM))

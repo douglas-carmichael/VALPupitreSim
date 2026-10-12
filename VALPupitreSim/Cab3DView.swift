@@ -70,11 +70,16 @@ struct Cab3DView: View {
             content.camera = .virtual
             content.renderingEffects.antialiasing = .multisample4X
             content.add(rig.makeScene(layout: layout, cameraOffset: frame.cameraOffset))
-        } update: { _ in
+        } update: { content in
+            // A different line is a different scene: swap it inside the same
+            // view. Recreating the RealityView (`.id`) gives it a new Metal
+            // layer, whose drawables can fail to allocate and leave it black.
+            if rig.layoutID != layout.id {
+                content.entities.removeAll()
+                content.add(rig.makeScene(layout: layout, cameraOffset: frame.cameraOffset))
+            }
             rig.apply(frame)
         }
-        // A different line is a different scene: rebuild it.
-        .id(layout.id)
         .realityViewCameraControls(.none)
         .backgroundStyle(background)
         .background(background)
@@ -308,7 +313,11 @@ private final class CabSceneRig {
     private var doorOpenness: SIMD2<Float>?
     private var others = OtherRamesLayer()
 
+    /// The line the scene was last built for.
+    private(set) var layoutID: String?
+
     func makeScene(layout: TrackLayout, cameraOffset: SIMD3<Float>) -> Entity {
+        layoutID = layout.id
         track = layout.isLoop
             ? CircleSceneTrack(length: Float(layout.lengthM))
             : StraightSceneTrack(length: Float(layout.lengthM))

@@ -236,8 +236,12 @@ closure; they don't run their own clocks for simulation.
   rig at build time and updating it there (or, for a varying number of them,
   in a pool that grows and hides, like `OtherRamesLayer`). Only swap
   materials/components when a value changes (see the headlight handling).
-  Each `RealityView` carries `.id(layout.id)`, so a change of line rebuilds its
-  scene, and everything is placed through the rig's `SceneTrack`. RealityKit
+  A change of line rebuilds the scene inside the same `RealityView`: its
+  `update` closure sees `rig.layoutID` differ, empties the content and adds
+  a fresh `makeScene`. Don't recreate the view instead (`.id(layout.id)`):
+  the new view's Metal layer can fail to allocate drawables
+  (`nextDrawable returning nil because allocation failed`) and stay black.
+  Everything is placed through the rig's `SceneTrack`. RealityKit
   has no fog, and its orthographic `scale` is a half-extent like SceneKit's
   `orthographicScale`. To look at a scene without running the app, compile
   the rig's file (with `private` dropped from the rig class) together with
