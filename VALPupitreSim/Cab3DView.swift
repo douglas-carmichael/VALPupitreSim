@@ -9,6 +9,8 @@ import RealityKit
 /// A 3D "from-the-cab" perspective of the VAL 206 looking out the front windshield.
 /// Includes the cab cockpit frame, guideway, tunnel lights,
 /// stations with synchronized platform doors, dynamic headlights, and a HUD overlay.
+/// The guideway is the straight test track, or a PCC's loop under PCC command,
+/// where the other rames the PCC reports run ahead.
 struct Cab3DView: View {
     let model: SimulationModel
     @State private var showHUD: Bool = true
@@ -58,17 +60,21 @@ struct Cab3DView: View {
             doorsLeftOpenness: Float(model.doorsLeftOpenness),
             doorsRightOpenness: Float(model.doorsRightOpenness),
             headlightsOn: model.kph,
-            cameraOffset: cameraPreset.offset
+            cameraOffset: cameraPreset.offset,
+            otherRames: model.otherRames
         )
         let background = Color(red: 0.02, green: 0.03, blue: 0.05)
+        let layout = model.layout
 
         return RealityView { content in
             content.camera = .virtual
             content.renderingEffects.antialiasing = .multisample4X
-            content.add(rig.makeScene(model: model, cameraOffset: frame.cameraOffset))
+            content.add(rig.makeScene(layout: layout, cameraOffset: frame.cameraOffset))
         } update: { _ in
             rig.apply(frame)
         }
+        // A different line is a different scene: rebuild it.
+        .id(layout.id)
         .realityViewCameraControls(.none)
         .backgroundStyle(background)
         .background(background)
@@ -152,6 +158,12 @@ struct Cab3DView: View {
                         Text("FIN DE PARCOURS")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(.white)
+                    }
+                    if let limit = model.stopLimitDistance {
+                        Text(String(format: "POINT D'ARRÊT  ·  %.0f m", max(0, limit)))
+                            .font(.system(size: 11, weight: .black, design: .monospaced))
+                            .foregroundStyle(limit < 30 ? Color.red : Color.orange)
+                            .padding(.top, 2)
                     }
                 }
                 .padding(.horizontal, 12)
@@ -250,8 +262,8 @@ struct Cab3DView: View {
 
 // MARK: - CabSceneRig
 
-/// Builds the cab scene once and keeps references to the animated entities
-/// so per-frame updates don't have to walk the entity tree.
+/// Builds the cab scene once per line and keeps references to the animated
+/// entities so per-frame updates don't have to walk the entity tree.
 @MainActor
 private final class CabSceneRig {
     struct Frame {
@@ -261,11 +273,16 @@ private final class CabSceneRig {
         var doorsRightOpenness: Float
         var headlightsOn: Bool
         var cameraOffset: SIMD3<Float>
+        var otherRames: [OtherRame]
     }
 
+    /// One half of a platform screen door. It slides along the track from
+    /// `baseS` as the rame's doors on the same side open.
     struct StationDoorHalf {
         let entity: Entity
-        let baseZ: Float
+        let baseS: Float
+        let x: Float
+        let y: Float
         let direction: Float
         let isLeft: Bool
     }
@@ -273,14 +290,25 @@ private final class CabSceneRig {
     /// Lumens for each headlight spot when KPH is on.
     private static let headlightIntensity: Float = 36_000
 
+    private var track: any SceneTrack = StraightSceneTrack(length: 1500)
     private var trainRoot = Entity()
     private var camera = Entity()
     private var headlightSpots: [Entity] = []
     private var stationDoorHalves: [StationDoorHalf] = []
     private var shakeOffset: Float = 0
     private var headlightsOn: Bool?
+    private var doorOpenness: SIMD2<Float>?
+    private var others = OtherRamesLayer()
 
-    func makeScene(model: SimulationModel, cameraOffset: SIMD3<Float>) -> Entity {
+    func makeScene(layout: TrackLayout, cameraOffset: SIMD3<Float>) -> Entity {
+        track = layout.isLoop
+            ? CircleSceneTrack(length: Float(layout.lengthM))
+            : StraightSceneTrack(length: Float(layout.lengthM))
+        headlightSpots = []
+        stationDoorHalves = []
+        headlightsOn = nil
+        doorOpenness = nil
+
         let root = Entity()
 
         // Dim overhead light for the night/tunnel feel
@@ -293,7 +321,10 @@ private final class CabSceneRig {
         // Guideway & Environment
         root.addChild(makeGuideway())
         root.addChild(makeTunnelLighting())
-        root.addChild(makeStations(model: model))
+        root.addChild(makeStations(layout))
+
+        others = OtherRamesLayer()
+        root.addChild(others.root)
 
         // Train & Cab assembly
         trainRoot = Entity()
@@ -325,42 +356,49 @@ private final class CabSceneRig {
         return root
     }
 
+    /// Distances along the line with something every `spacing` metres from
+    /// `offset`: a whole lap of a loop, or the test track end to end.
+    private func marks(every spacing: Float, from offset: Float = 0) -> StrideTo<Float> {
+        stride(from: offset, to: track.length + (track.isClosed ? 0 : 1), by: spacing)
+    }
+
     // MARK: - Guideway
 
     private func makeGuideway() -> Entity {
         let group = Entity()
-        let len: Float = 2000
-        let midZ = -len / 2 + 20
+        // A whole lap of a loop; the test track with a run-off past both ends.
+        let (s0, s1): (Float, Float) = track.isClosed ? (0, track.length) : (-20, track.length + 480)
 
         // Concrete slab
-        RK.add(RK.box(5.2, 0.25, len, RK.material(PColor(white: 0.28, alpha: 1))),
-               to: group, at: [0, -0.7, midZ])
+        group.addChild(RK.sweptBar(along: track, from: s0, to: s1, width: 5.2, height: 0.25,
+                                   y: -0.7, RK.material(PColor(white: 0.28, alpha: 1))))
 
         // Trademark VAL yellow central guide rail
-        RK.add(RK.box(0.18, 0.22, len, RK.material(.systemYellow)),
-               to: group, at: [0, -0.45, midZ])
+        group.addChild(RK.sweptBar(along: track, from: s0, to: s1, width: 0.18, height: 0.22,
+                                   y: -0.45, RK.material(.systemYellow)))
 
         // Rubber tire running tracks (dark concrete with tire marks)
         for x: Float in [-1.7, 1.7] {
-            RK.add(RK.box(0.65, 0.08, len, RK.material(PColor(white: 0.38, alpha: 1))),
-                   to: group, at: [x, -0.52, midZ])
+            group.addChild(RK.sweptBar(along: track, from: s0, to: s1, width: 0.65, height: 0.08,
+                                       x: x, y: -0.52, RK.material(PColor(white: 0.38, alpha: 1))))
         }
 
         // Side guide bars & parapet walls
         let wallMat = RK.material(PColor(white: 0.22, alpha: 1))
         let powerRailMat = RK.material(PColor(red: 0.5, green: 0.3, blue: 0.1, alpha: 1))
         for x: Float in [-3.0, 3.0] {
-            RK.add(RK.box(0.25, 2.8, len, wallMat), to: group, at: [x, 0.7, midZ])
+            group.addChild(RK.sweptBar(along: track, from: s0, to: s1, width: 0.25, height: 2.8,
+                                       x: x, y: 0.7, wallMat))
 
             // Conductor / power rail (750V) on uprights
-            RK.add(RK.box(0.1, 0.15, len, powerRailMat),
-                   to: group, at: [x > 0 ? x - 0.25 : x + 0.25, 0.3, midZ])
+            group.addChild(RK.sweptBar(along: track, from: s0, to: s1, width: 0.1, height: 0.15,
+                                       x: x > 0 ? x - 0.25 : x + 0.25, y: 0.3, powerRailMat))
         }
 
         // Track markers every 50m
         let stripeMat = RK.material(.white)
-        for m in stride(from: 0, through: 1500, by: 50) {
-            RK.add(RK.box(1.2, 0.015, 0.3, stripeMat), to: group, at: [0, -0.56, -Float(m)])
+        for m in marks(every: 50) {
+            RK.add(RK.box(1.2, 0.015, 0.3, stripeMat), to: group, on: track.frame(at: m), y: -0.56)
         }
 
         return group
@@ -375,20 +413,20 @@ private final class CabSceneRig {
         let lampMat = RK.material(PColor(white: 0.95, alpha: 1), emissive: warm, emissiveIntensity: 2)
 
         // Concrete tunnel ribs and lighting fixtures every 40m
-        for m in stride(from: 10, through: 1500, by: 40) {
-            let z = -Float(m)
+        for m in marks(every: 40, from: 10) {
+            let frame = track.frame(at: m)
 
             // Ceiling arch
-            RK.add(RK.box(6.2, 0.3, 0.6, archMat), to: group, at: [0, 3.2, z])
+            RK.add(RK.box(6.2, 0.3, 0.6, archMat), to: group, on: frame, y: 3.2)
 
             // Tunnel light fixture
-            RK.add(RK.box(0.8, 0.1, 0.25, cornerRadius: 0.02, lampMat), to: group, at: [0, 3.0, z])
+            RK.add(RK.box(0.8, 0.1, 0.25, cornerRadius: 0.02, lampMat), to: group, on: frame, y: 3.0)
 
             // Soft point light along tunnel
             RK.add(RK.pointLight(intensity: 8_000,
                                  color: PColor(red: 1.0, green: 0.92, blue: 0.75, alpha: 1),
                                  attenuationRadius: 25),
-                   to: group, at: [0, 2.7, z])
+                   to: group, on: frame, y: 2.7)
         }
 
         return group
@@ -396,7 +434,7 @@ private final class CabSceneRig {
 
     // MARK: - Stations
 
-    private func makeStations(model: SimulationModel) -> Entity {
+    private func makeStations(_ layout: TrackLayout) -> Entity {
         let group = Entity()
         let platformMat = RK.material(PColor(white: 0.65, alpha: 1))
         let safetyMat = RK.material(.systemYellow)
@@ -406,58 +444,62 @@ private final class CabSceneRig {
         let signMat = RK.material(.black)
         let signTextMat = RK.material(.white, emissive: .white)
 
-        for (i, m) in model.stationPositions.enumerated() {
-            let center = Float(m)
-            let stationName = model.stationNames[i]
+        for station in layout.stations {
+            let center = Float(station.positionM)
 
             // Station hall structure
             for side: Float in [-1, 1] {
                 // Platform floor
-                RK.add(RK.box(2.2, 0.9, 50, cornerRadius: 0.05, platformMat),
-                       to: group, at: [side * 3.0, -0.2, -center])
+                group.addChild(RK.sweptBar(along: track, from: center - 25, to: center + 25,
+                                           width: 2.2, height: 0.9, x: side * 3.0, y: -0.2,
+                                           platformMat))
 
                 // Yellow warning safety tactile line
-                RK.add(RK.box(0.15, 0.01, 50, safetyMat),
-                       to: group, at: [side * 2.05, 0.26, -center])
+                group.addChild(RK.sweptBar(along: track, from: center - 25, to: center + 25,
+                                           width: 0.15, height: 0.01, x: side * 2.05, y: 0.26,
+                                           safetyMat))
 
                 // Platform Screen Doors (Façades de quai VAL)
                 // Glazed screen with bi-parting doors at train door positions
-                for zOffset in stride(from: Float(-12), through: 12, by: 4.5) {
-                    let doorCenter = -center + zOffset
+                for offset in stride(from: Float(-12), through: 12, by: 4.5) {
+                    let doorCenter = center - offset
 
                     // Door framing
-                    RK.add(RK.box(0.05, 2.4, 1.4, frameMat),
-                           to: group, at: [side * 1.95, 1.2, doorCenter])
+                    RK.add(RK.box(0.05, 2.4, 1.4, frameMat), to: group,
+                           on: track.frame(at: doorCenter), x: side * 1.95, y: 1.2)
 
                     // Sliding door halves
                     for slide: Float in [-1, 1] {
-                        let baseZ = doorCenter + slide * 0.28
-                        let door = RK.add(RK.box(0.02, 2.1, 0.55, glassMat),
-                                          to: group, at: [side * 1.93, 1.1, baseZ])
-                        stationDoorHalves.append(.init(entity: door, baseZ: baseZ,
+                        let baseS = doorCenter - slide * 0.28
+                        let door = RK.add(RK.box(0.02, 2.1, 0.55, glassMat), to: group,
+                                          on: track.frame(at: baseS), x: side * 1.93, y: 1.1)
+                        stationDoorHalves.append(.init(entity: door, baseS: baseS,
+                                                       x: side * 1.93, y: 1.1,
                                                        direction: slide, isLeft: side < 0))
                     }
                 }
             }
 
             // Station Roof & Lighting
-            RK.add(RK.box(8.5, 0.4, 55, ceilingMat), to: group, at: [0, 3.8, -center])
+            group.addChild(RK.sweptBar(along: track, from: center - 27.5, to: center + 27.5,
+                                       width: 8.5, height: 0.4, y: 3.8, ceilingMat))
 
             // Bright station lights
-            for zOffset in stride(from: Float(-20), through: 20, by: 10) {
+            for offset in stride(from: Float(-20), through: 20, by: 10) {
                 RK.add(RK.pointLight(intensity: 27_000, attenuationRadius: 22),
-                       to: group, at: [0, 3.4, -center + zOffset])
+                       to: group, on: track.frame(at: center + offset), y: 3.4)
             }
 
             // Illuminated Station Signage, facing the track
+            let frame = track.frame(at: center)
             for side: Float in [-1, 1] {
                 RK.add(RK.box(0.08, 0.5, 4.5, cornerRadius: 0.02, signMat),
-                       to: group, at: [side * 2.2, 2.5, -center])
+                       to: group, on: frame, x: side * 2.2, y: 2.5)
 
-                let text = RK.centeredText(stationName, font: .boldSystemFont(ofSize: 0.22),
+                let text = RK.centeredText(station.name, font: .boldSystemFont(ofSize: 0.22),
                                            extrusionDepth: 0.02, signTextMat)
-                RK.add(text, to: group, at: [side * 2.14, 2.5, -center],
-                       orientation: RK.euler(0, side > 0 ? -.pi / 2 : .pi / 2, 0))
+                RK.add(text, to: group, on: frame, x: side * 2.14, y: 2.5,
+                       turn: RK.euler(0, side > 0 ? -.pi / 2 : .pi / 2, 0))
             }
         }
 
@@ -516,7 +558,7 @@ private final class CabSceneRig {
     // MARK: - Per-Frame Update
 
     func apply(_ frame: Frame) {
-        trainRoot.position = [0, 0, -frame.positionM]
+        trainRoot.transform = track.frame(at: frame.positionM).transform
 
         // Subtle cab vibration proportional to speed (rubber tires on concrete joints)
         let base = frame.cameraOffset
@@ -532,6 +574,8 @@ private final class CabSceneRig {
             camera.orientation = RK.euler(-0.04, 0, 0)
         }
 
+        others.apply(frame.otherRames, on: track, camera: camera.position(relativeTo: nil))
+
         // Dynamic Headlights (KPH) — only touch the components on change.
         if headlightsOn != frame.headlightsOn {
             headlightsOn = frame.headlightsOn
@@ -541,11 +585,17 @@ private final class CabSceneRig {
             }
         }
 
-        // Platform screen doors synchronized with train doors
-        let slideDistance: Float = 0.55
-        for half in stationDoorHalves {
-            let openness = half.isLeft ? frame.doorsLeftOpenness : frame.doorsRightOpenness
-            half.entity.position.z = half.baseZ + half.direction * openness * slideDistance
+        // Platform screen doors synchronized with train doors, slid along the
+        // track — only re-placed when the openness changes.
+        let openness = SIMD2(frame.doorsLeftOpenness, frame.doorsRightOpenness)
+        if doorOpenness != openness {
+            doorOpenness = openness
+            let slideDistance: Float = 0.55
+            for half in stationDoorHalves {
+                let open = half.isLeft ? openness.x : openness.y
+                let s = half.baseS - half.direction * open * slideDistance
+                half.entity.position = track.frame(at: s).point(x: half.x, y: half.y)
+            }
         }
     }
 }

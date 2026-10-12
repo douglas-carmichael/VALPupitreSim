@@ -10,9 +10,22 @@
 		A33A342C2FDF5DDA00731BC7 /* VALPupitreSim.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VALPupitreSim.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A33A343B2FDF5DDB00731BC7 /* Exceptions for "VALPupitreSim" folder in "VALPupitreSim" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A33A342B2FDF5DDA00731BC7 /* VALPupitreSim */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A33A342E2FDF5DDA00731BC7 /* VALPupitreSim */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A33A343B2FDF5DDB00731BC7 /* Exceptions for "VALPupitreSim" folder in "VALPupitreSim" target */,
+			);
 			path = VALPupitreSim;
 			sourceTree = "<group>";
 		};
@@ -261,10 +274,13 @@
 				DEVELOPMENT_TEAM = 7VLPNC6E86;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VALPupitreSim/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Lets a PCC such as metroSystem find this cab on your local network and command it.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -294,10 +310,13 @@
 				DEVELOPMENT_TEAM = 7VLPNC6E86;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VALPupitreSim/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Lets a PCC such as metroSystem find this cab on your local network and command it.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

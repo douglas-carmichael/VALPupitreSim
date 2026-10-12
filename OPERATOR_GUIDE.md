@@ -18,7 +18,8 @@ This document is the source-of-truth reference for the in-app guide (see
      [2.8 PA Control Profile](#28-pa-control-profile)
    - [2.9 Emergency Brake](#29-emergency-brake-frein-durgence) ·
      [2.10 Voyants](#210-voyants-indicator-lights) · [2.11 Audio](#211-audio) ·
-     [2.12 USB HID Input](#212-usb-hid-input) · [2.13 Displays](#213-displays)
+     [2.12 USB HID Input](#212-usb-hid-input) · [2.13 Displays](#213-displays) ·
+     [2.14 PCC Link](#214-pcc-link-commande-pcc)
 3. [Operating Procedures](#3-operating-procedures)
 4. [Glossary](#4-glossary)
 
@@ -32,7 +33,9 @@ placed in revenue service in 1983. The **VAL 206** variant takes its name
 from the body width of its vehicles: **2.06 m**.
 
 This simulator reproduces the **manual-driving cab** (*pupitre de conduite
-manuelle*) of a VAL 206 trainset, on a 1.5 km test track with three stations.
+manuelle*) of a VAL 206 trainset, on a 1.5 km test track with three stations —
+or, under PCC command, on the line a PCC lends it, among that line's other
+rames (§2.14).
 The switch nomenclature and pupitre layout follow the replica pupitre shown
 in **La Patate Douce**'s video
 [*Pupitre VAL 206 : Simulation de conduite manuelle*](https://www.youtube.com/watch?v=U4T-fxTc7go),
@@ -139,7 +142,12 @@ Three stations on the test track:
 | P75 | RÉPUBLIQUE | 750 m |
 | P125 | GRAND-PLACE | 1 250 m |
 
-Position is shown as `P000 / 150` (each unit = 10 m).
+Position is shown as `P000 / 150` (each unit = 10 m). It locates the centre
+of the leading car (car 1, at the AV end): that is the point PA stops on the
+platform mark.
+
+On a PCC's line (§2.14) the stations are the PCC's, and the position reads
+against that line's length — `P085 / 100` on a 1 km loop.
 
 **Door interlock** — all conditions required:
 
@@ -208,6 +216,13 @@ brake forever on the platform it just stopped at:
 Turning **PA** off, cutting **KG**, or moving the reverser to **0** resets the
 sequence; a suspension (doors, EB) does not — the berth survives it.
 
+**PCC stopping point.** When the PCC has set a stopping point (§2.14) that
+comes before the next station, PA brakes onto it exactly as onto a platform
+mark, and waits there until the PCC moves it on.
+
+**Loops.** On a PCC's loop there is no terminus: PA serves the stations lap
+after lap, and NAV has nothing to do.
+
 **Terminus.** The last station in the direction of travel *is* the terminus: PA
 stays berthed there and holds the platform rather than running on to the end of
 track. Moving the reverser to the opposite direction releases the berth and PA
@@ -229,7 +244,11 @@ A latched key-protected mushroom button (**ARRÊT**).
 - First press: brake applied at 2.8 m/s², URG voyant illuminates, brake
   hiss runs at maximum amplitude, traction inhibited.
 - Second press: brake released.
-- Also auto-applied when the dead-man timer exceeds 20 s in PM.
+- Also auto-applied when the dead-man timer exceeds 20 s in PM, and — under
+  PCC command — when the link to the PCC is lost or the rame runs past the
+  PCC's stopping point (§2.14). Any connected PCC can apply it too.
+- When something other than ARRÊT latched it, the station bar names the
+  cause (§2.13).
 - Like the service brake, it needs **KG** on to act (see §2.5).
 
 ### 2.10 Voyants (Indicator Lights)
@@ -293,6 +312,10 @@ How each input behaves:
 - **Buttons 9–11** set the reverser position on press.
 - **Button 12** toggles the emergency brake on each press.
 
+Under PCC command (§2.14) the HID pupitre is locked out like the on-screen
+one: only button 12 still acts. Latching switches wired to buttons 1, 3 and 4
+may disagree with what the PCC set; toggle them after taking the cab back.
+
 The connected device's name appears in the HUD beside `PUPITRE USB:`. With
 no device connected, mouse input on the on-screen pupitre is fully
 functional.
@@ -303,14 +326,103 @@ The main window, from top to bottom:
 
 | Area | Shows |
 |------|-------|
-| Status bar | Position, speed (km/h), master-controller value, the **PA** badge (**PA STBY** when PA is selected but suspended), the mute button and the reverser position. Also holds the guide (📖) and **VUE CABINE** buttons. |
-| Station bar | Current station or next stop and its distance, the USB pupitre status, and a **VIGILANCE** alert during a dead-man warning. |
-| Track overview | Top-down map of the whole line with the train marker. |
-| Chase camera | 3D view of the train on the guideway. Headlights follow **KPH**. |
-| Pupitre | The control desk: switches, reverser, master controller, voyants, push buttons, KACOP, speedometer and emergency brake. |
+| Status bar | Position, speed (km/h), master-controller value, the **PA** badge (**PA STBY** when PA is selected but suspended), the **COMMANDE** selector (§2.14), the mute button and the reverser position. Also holds the guide (📖) and **VUE CABINE** buttons. |
+| Station bar | Current station or next stop and its distance; a **POINT D'ARRÊT** pill with the distance to the PCC's stopping point, red within 30 m; a **FREIN D'URGENCE** pill naming the cause when something other than ARRÊT latched the emergency brake (VEILLE (KACOP), COMMANDÉ PAR LE PCC, PERTE DE LIAISON PCC, POINT D'ARRÊT FRANCHI); the USB pupitre status; the **PCC** link pill (§2.14); and a **VIGILANCE** alert during a dead-man warning. |
+| Track overview | Top-down map of the whole line with the train marker (white and green, with an orange arrow for the direction of travel). A PCC's loop is drawn as a racetrack with its cantons ticked off and its name in the middle; the other rames the PCC reports appear as blue markers carrying their numbers. |
+| Chase camera | 3D view of the train on the guideway — straight on the test track, a circle on a PCC's loop. Headlights follow **KPH**. The other rames on a PCC's line run on the same guideway, numbered. |
+| Pupitre | The control desk: switches, reverser, master controller, voyants, push buttons, KACOP, speedometer and emergency brake. Under PCC command everything but ARRÊT is locked, and a green banner says so. |
 
 **VUE CABINE** opens a separate window with the driver's-eye view and a HUD
-overlay.
+overlay, which also shows the distance to the PCC's stopping point. On a PCC's
+line the rame ahead is in sight — its red tail lamps first.
+
+### 2.14 PCC Link (Commande PCC)
+
+A **PCC** (*Poste de Commande Centralisé*) — such as the metroSystem
+dispatcher — can find the cab on the local network, follow it, and command
+it. The protocol is specified in [`PCC_API.md`](PCC_API.md).
+
+**Discovery.** The cab advertises itself over Bonjour (`_valpupitre._tcp`) as
+`Rame <number> — <computer name>` and listens on TCP port 5206 (any free port
+if 5206 is taken). On first launch macOS asks whether the app may use the
+local network: allow it, or PCCs won't find the cab.
+
+**COMMANDE selector.** The status bar's selector chooses who drives:
+
+| Position | Meaning |
+|----------|---------|
+| **LOCALE** | The pupitre drives (the default). PCCs may follow the cab and apply its emergency brake, nothing more. |
+| **PCC** | The PCC in command drives. The pupitre and the USB HID pupitre are locked — they show what the PCC sets but don't respond — except **ARRÊT**, which stays live. |
+
+Only the cab can move the selector, and it keeps its position across
+launches.
+
+**One PCC in command.** Several PCCs may be connected at once. One of them
+takes control, and only its commands are applied: KG, KIBS, KPH, PA, NAV, the
+reverser (at a stand only), the master controller, KACOP, the door buttons and
+the emergency brake. Any connected PCC may apply the emergency brake,
+whichever way the selector is set.
+
+**Link watchdog.** Under PCC command the cab must keep hearing from its PCC.
+After **3 s** of silence — the link is lost, the PCC has gone quiet, or no PCC
+has taken control — it applies the emergency brake: fail-safe by absence. The
+brake stays latched when the link returns; the PCC or ARRÊT releases it. A cab
+switched to PCC before any PCC has connected therefore waits, braked, for one
+to take over.
+
+**Same rules as the pupitre.** The PCC drives under the cab's interlocks:
+traction is cut by KG, the reverser, the emergency brake and the doors, and
+in PM the PCC has to acknowledge KACOP like a driver.
+
+**The PCC's line.** A PCC can lend the rame its own line — metroSystem lends
+its 1 km loop. Once the cab is under PCC command and at a stand, the rame
+moves onto that line where the PCC puts it (metroSystem picks the station
+farthest from its own trains), and every view redraws for it: the chase and
+cab views follow the loop round, and the map shows it as a racetrack with its
+cantons and its name. The station bar and the HUD then count down to that
+line's stations.
+
+**Stopping point (point d'arrêt).** The PCC can give the rame a point it must
+not pass — metroSystem puts it 8 m short of the first block ahead held by
+another rame, as its fixed-block wayside does for its own trains. The
+**POINT D'ARRÊT** pill shows how far there is to go. PA stops on it; driving
+past it (more than 1 m, still moving) latches the emergency brake —
+**POINT D'ARRÊT FRANCHI**.
+
+**Other rames.** The PCC can also tell the cab where the line's other rames
+are. They appear in the chase and cab views as rames like this one, with their
+number above them, white lamps at the end leading and red at the end
+trailing, and on the map as blue numbered markers. Between the PCC's reports
+they move on at their last reported speed; if the reports stop for 2 s they
+disappear. They are for display only: it is the PCC's stopping point that
+keeps the rame clear of them.
+
+**Telemetry.** The cab streams its rame's instruments to every connected PCC
+along with its state: the traction chain (line voltage and current, armature
+and field currents, chopper duty, torque, regeneration) and the auxiliaries
+(converter, battery, lighting, compressor and main reservoir, brake-box
+temperature). They are worked out from what the simulation is doing, with
+the VAL 206's traction-chain figures, so metroSystem's train-detail synoptic
+shows real values for the rame. They don't affect the driving.
+
+**Taking the cab back.** Turn the selector to **LOCALE** at any time; the PCC's
+commands are refused from then on. A rame on the PCC's line returns to the
+test track, stopped where it left it; the stopping point and the other rames
+go with the PCC.
+
+**PCC pill.** The station bar's **PCC** pill sums up the link:
+
+| Colour | Meaning |
+|--------|---------|
+| grey | Under LOCALE command, no PCC connected. |
+| yellow | Under LOCALE command, with PCCs connected. |
+| green | Under PCC command, with the PCC in command named. |
+| red | Under PCC command without a PCC (EN ATTENTE DU PCC), or the link has failed. |
+
+Click it for the details: the Bonjour name, the port, the connected PCCs, and
+the **rame number** the cab presents to them. By default that number lies
+between 301 and 399 and stays the same for a given Mac. Edit it and press
+Return. Give each cab its own number when several share a network.
 
 ---
 
@@ -374,6 +486,20 @@ If stopped between stations under PA (e.g. EB has tripped):
 1. Release the emergency brake.
 2. Either continue in PA or flip PA off and drive manually.
 
+### 3.7 Handing the Cab to the PCC
+
+1. Start the PCC (metroSystem) on the same local network. The **PCC** pill
+   turns yellow once it has connected.
+2. Turn the **COMMANDE** selector to **PCC**. The pupitre locks, and the PCC
+   pill turns green and names the PCC once it has taken control.
+3. The PCC now drives. If no PCC takes control within 3 s, the emergency
+   brake latches (PERTE DE LIAISON PCC) until a PCC releases it.
+4. metroSystem moves the rame onto its loop, at a station, and the views show
+   its trains. From there metroSystem's operator puts the rame in service.
+5. In an emergency, strike **ARRÊT**: it always works.
+6. To take the cab back, turn the selector to **LOCALE**. The rame returns to
+   the test track.
+
 ---
 
 ## 4. Glossary
@@ -381,6 +507,7 @@ If stopped between stations under PA (e.g. EB has tripped):
 - **Acquittement** — acknowledgment.
 - **AVA** — *AVertisseur Acoustique* (horn).
 - **Boucle de Sécurité (BS)** — safety interlock loop.
+- **Canton** — block: a fixed section of line that one rame holds at a time.
 - **Coupure** — cutoff / isolation.
 - **FP** — *Fermeture Portes*.
 - **K-** — prefix denoting *contacteur* (contactor) in French electrical
@@ -388,7 +515,11 @@ If stopped between stations under PA (e.g. EB has tripped):
 - **Manipulateur** — controller / handle.
 - **Navette (NAV)** — shuttle service between the two termini.
 - **PA / PM** — *Pilotage Automatique / Manuel*.
+- **PCC** — *Poste de Commande Centralisé*: the central control post that
+  supervises the line's trains.
 - **PO G / PO D** — *Porte Ouverture Gauche / Droite*.
+- **Point d'arrêt** — stopping point: where the PCC requires the rame to stop.
 - **Pupitre** — cab control desk.
+- **Rame** — trainset.
 - **Veille** — vigilance / dead-man device.
 - **Voyant** — indicator light.

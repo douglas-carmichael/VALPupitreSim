@@ -18,6 +18,9 @@ import IOKit.hid
 /// - Buttons 1..12 → KG, KACOP, KIBS, KPH, horn, PO G, PO D, FP,
 ///   reverser AV, reverser 0, reverser AR, emergency brake.
 /// - Axis Y → master controller (forward stick = +traction).
+///
+/// Under PCC command the desk is locked out: only the emergency brake
+/// (button 12) still acts.
 @Observable
 final class HIDInputManager {
 
@@ -94,6 +97,7 @@ final class HIDInputManager {
         }
 
         if usagePage == UInt32(kHIDPage_GenericDesktop) {
+            guard model.authority == .local else { return }
             let lo = IOHIDElementGetLogicalMin(element)
             let hi = IOHIDElementGetLogicalMax(element)
             let range = hi - lo
@@ -108,6 +112,7 @@ final class HIDInputManager {
     }
 
     private func applyButton(_ usage: Int, pressed: Bool, model: SimulationModel) {
+        if model.authority == .pcc && usage != 12 { return }
         switch usage {
         case 1:  model.kg = pressed
         case 2:  model.kacop = pressed

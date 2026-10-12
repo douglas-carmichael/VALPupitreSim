@@ -28,6 +28,7 @@ struct OperatorGuideView: View {
                     section("8. Frein d'Urgence", body: emergencyBody)
                     section("9. Audio", body: audioBody)
                     section("10. Entrée USB HID", body: hidBody)
+                    section("11. Commande PCC", body: pccBody)
                     section("Glossaire", body: glossaryBody)
                 }
                 .padding(24)
@@ -144,7 +145,7 @@ struct OperatorGuideView: View {
     private var introBody: String { """
     Le **VAL** (*Véhicule Automatique Léger*) est un métro automatique sur pneumatiques conçu par **Matra Transport** pour Lille en 1983. Le **VAL 206** doit son nom à la largeur de ses caisses : **2,06 m**.
 
-    Ce simulateur reproduit le **pupitre de conduite manuelle** d'une rame VAL 206, sur un tronçon de 1,5 km comportant trois stations. La nomenclature et les contacteurs suivent ceux de la réplique de pupitre présentée par **La Patate Douce** dans la vidéo [*Pupitre VAL 206 : Simulation de conduite manuelle*](https://www.youtube.com/watch?v=U4T-fxTc7go), qui a inspiré le projet.
+    Ce simulateur reproduit le **pupitre de conduite manuelle** d'une rame VAL 206, sur un tronçon de 1,5 km comportant trois stations — ou, en commande PCC, sur la ligne que le PCC lui prête, parmi les autres rames de cette ligne (§11). La nomenclature et les contacteurs suivent ceux de la réplique de pupitre présentée par **La Patate Douce** dans la vidéo [*Pupitre VAL 206 : Simulation de conduite manuelle*](https://www.youtube.com/watch?v=U4T-fxTc7go), qui a inspiré le projet.
     """ }
 
     private var theoryBody: String { """
@@ -210,16 +211,22 @@ struct OperatorGuideView: View {
 
     Le PA se **suspend** automatiquement à l'ouverture des portes ou à l'enclenchement du frein d'urgence, et **reprend** dès que les conditions reviennent, sans perdre la station en cours. Couper **PA**, **KG** ou passer le reverseur sur **0** réinitialise l'enchaînement.
 
+    **Point d'arrêt du PCC.** Quand le PCC a fixé un point d'arrêt (§11) avant la prochaine station, le PA freine dessus exactement comme sur une marque de quai, et y attend que le PCC le déplace.
+
+    **Boucles.** Sur la boucle d'un PCC, il n'y a pas de terminus : le PA dessert les stations tour après tour, et NAV n'a rien à faire.
+
     **Terminus.** La dernière station du sens de marche *est* le terminus : la rame y reste garée, frein maintenu, sans rejoindre la fin de voie. Inverser le reverseur libère le quai et le PA repart en sens inverse. PA engagé sans aucune station devant maintient simplement le frein. La **veille KACOP est bypassée** en PA.
 
     **Navette (NAV).** Avec **NAV** activé, le PA effectue lui-même le retournement : à la fin du stationnement au terminus (10 s, ou immédiatement après un cycle de portes **FP**), il inverse le reverseur — celui du pupitre suit — et repart en sens inverse, d'un terminus à l'autre, indéfiniment. Engagé au-delà du dernier quai, il s'arrête, se retourne et dessert d'abord ce quai. Couper NAV en route laisse la rame finir son trajet et se garer au terminus suivant. NAV n'a pas de bouton HID.
     """ }
 
     private var stationsBody: String { """
-    Trois stations sur la ligne :
+    Trois stations sur la voie d'essai :
     - **P25 — QUATRE-CANTONS** (250 m)
     - **P75 — RÉPUBLIQUE** (750 m)
     - **P125 — GRAND-PLACE** (1 250 m)
+
+    La position s'affiche sous la forme `P000 / 150` (une unité = 10 m). Elle repère le centre de la voiture de tête (voiture 1, côté AV) : c'est ce point que le PA arrête sur la marque du quai. Sur la ligne d'un PCC (§11), les stations sont celles du PCC et la position se lit sur la longueur de sa ligne — `P085 / 100` sur une boucle de 1 km.
 
     Conditions pour autoriser l'ouverture des portes :
     - **KG** sur on,
@@ -248,7 +255,7 @@ struct OperatorGuideView: View {
     - **Inhibe toute traction**, quel que soit le manipulateur.
     - **Nouvel appui** : déverrouillage.
 
-    Déclenché aussi automatiquement par expiration du KACOP (> 20 s) en mode manuel. Comme le frein service, il n'agit que **KG** fermé.
+    Déclenché aussi automatiquement par expiration du KACOP (> 20 s) en mode manuel et, en commande PCC, par la perte de liaison avec le PCC ou le franchissement du point d'arrêt fixé par le PCC (§11). Tout PCC connecté peut aussi le serrer. Quand ce n'est pas l'ARRÊT qui l'a serré, la barre des stations en indique la cause. Comme le frein service, il n'agit que **KG** fermé.
     """ }
 
     private var audioBody: String { """
@@ -274,21 +281,65 @@ struct OperatorGuideView: View {
     - **Boutons 9 à 11** positionnent le reverseur à l'appui.
     - **Bouton 12** bascule le frein d'urgence à chaque appui.
 
+    En commande PCC (§11), le pupitre USB est verrouillé comme le pupitre à l'écran : seul le bouton 12 agit encore. Les interrupteurs à accrochage des boutons 1, 3 et 4 peuvent alors ne plus correspondre à ce que le PCC a commandé : rebasculez-les après la reprise en local.
+
     Le nom du périphérique connecté s'affiche dans la barre d'état (« PUPITRE USB : … »). Sans pupitre, le pilotage à la souris reste possible sur tous les contrôles virtuels.
+    """ }
+
+    private var pccBody: String { """
+    Un **PCC** (*Poste de Commande Centralisé*) — par exemple le dispatcher de metroSystem — peut trouver le pupitre sur le réseau local, le suivre et le commander. Le protocole est décrit dans `PCC_API.md`.
+
+    **Découverte.** Le pupitre s'annonce en Bonjour (`_valpupitre._tcp`) sous le nom « Rame *numéro* — *nom de l'ordinateur* » et écoute sur le port TCP 5206 (un autre port libre si 5206 est pris). Au premier lancement, macOS demande si l'application peut accéder au réseau local : acceptez, sinon les PCC ne trouveront pas le pupitre.
+
+    **Sélecteur COMMANDE** (barre d'état) :
+    - **LOCALE** (par défaut) : le pupitre conduit. Les PCC peuvent suivre la rame et serrer son frein d'urgence, rien de plus.
+    - **PCC** : le PCC en commande conduit. Le pupitre et le pupitre USB sont verrouillés — ils affichent ce que le PCC commande sans y répondre — sauf l'**ARRÊT**, qui reste actif.
+
+    Seul le pupitre peut manœuvrer le sélecteur, qui garde sa position d'un lancement à l'autre.
+
+    **Un seul PCC en commande.** Plusieurs PCC peuvent être connectés ; un seul prend la commande, et seules ses commandes sont appliquées : KG, KIBS, KPH, PA, NAV, reverseur (à l'arrêt seulement), manipulateur T/F, KACOP, portes et frein d'urgence. Tout PCC connecté peut serrer le frein d'urgence, quelle que soit la position du sélecteur.
+
+    **Surveillance de liaison.** En commande PCC, le pupitre doit entendre son PCC en permanence. Après **3 s** de silence — liaison perdue, PCC muet ou aucun PCC en commande — il serre le frein d'urgence : sécurité par manque. Le frein reste serré au retour de la liaison ; le PCC ou l'ARRÊT le desserre. Un pupitre passé en commande PCC avant qu'un PCC ne se connecte attend donc, freiné, qu'un PCC en prenne la commande.
+
+    **Mêmes règles qu'au pupitre.** Le PCC conduit sous les verrouillages de la cabine : la traction est coupée par KG, le reverseur, le frein d'urgence et les portes, et en PM le PCC doit acquitter le KACOP comme un conducteur.
+
+    **La ligne du PCC.** Un PCC peut prêter sa propre ligne à la rame — metroSystem prête sa boucle de 1 km. Dès que le pupitre est en commande PCC et à l'arrêt, la rame passe sur cette ligne à l'endroit choisi par le PCC (metroSystem prend la station la plus éloignée de ses rames), et toutes les vues se redessinent : les vues poursuite et cabine suivent la boucle, et le plan la montre en piste de course, avec ses cantons et son nom. La barre des stations et l'affichage tête haute comptent alors vers les stations de cette ligne.
+
+    **Point d'arrêt.** Le PCC peut imposer à la rame un point à ne pas franchir — metroSystem le place 8 m avant le premier canton occupé devant elle, comme son block fixe le fait pour ses propres rames. La pastille **POINT D'ARRÊT** indique la distance restante (en rouge à moins de 30 m), reprise dans l'affichage tête haute de la vue cabine. Le PA s'y arrête ; le franchir (de plus d'1 m, en mouvement) serre le frein d'urgence — **POINT D'ARRÊT FRANCHI**.
+
+    **Autres rames.** Le PCC peut aussi indiquer au pupitre où se trouvent les autres rames de la ligne. Elles apparaissent dans les vues poursuite et cabine comme des rames semblables à celle-ci, numérotées, feux blancs à l'avant dans leur sens de marche et feux rouges à l'arrière, et sur le plan comme des repères bleus portant leur numéro. Entre deux comptes rendus du PCC, elles avancent à leur dernière vitesse connue ; sans nouvelles pendant 2 s, elles disparaissent. Elles ne servent qu'à l'affichage : c'est le point d'arrêt du PCC qui tient la rame à distance.
+
+    **Télémesures.** Le pupitre transmet à chaque PCC connecté, avec son état, les mesures de la rame : chaîne de traction (tension et courant ligne, courants d'induit et d'excitation, taux de modulation du hacheur, couple, récupération) et auxiliaires (convertisseur, batterie, éclairage, compresseur et réservoir principal, température du coffre-frein). Elles sont déduites de ce que fait la simulation, avec les caractéristiques de la chaîne de traction du VAL 206 : le synoptique de rame de metroSystem affiche ainsi des valeurs réelles. Elles n'influent pas sur la conduite.
+
+    **Reprise en local.** Repassez le sélecteur sur **LOCALE** à tout moment : les commandes du PCC sont alors refusées. Une rame sur la ligne du PCC revient sur la voie d'essai, arrêtée là où elle l'avait quittée ; le point d'arrêt et les autres rames disparaissent avec le PCC.
+
+    **Pastille PCC** (barre des stations) : grise en commande locale sans PCC connecté, jaune en commande locale avec des PCC connectés, verte avec le nom du PCC en commande, rouge en commande PCC sans PCC (« EN ATTENTE DU PCC ») ou si la liaison est en défaut. Un clic ouvre le détail : nom Bonjour, port, PCC connectés et **numéro de rame** présenté aux PCC — de 301 à 399 par défaut, propre à chaque Mac. Modifiez-le puis appuyez sur Entrée ; donnez un numéro distinct à chaque pupitre d'un même réseau.
+
+    **Passer la main au PCC :**
+    1. Lancez le PCC (metroSystem) sur le même réseau local : la pastille PCC passe au jaune dès qu'il est connecté.
+    2. Passez le sélecteur **COMMANDE** sur **PCC** : le pupitre se verrouille, et la pastille passe au vert avec le nom du PCC quand celui-ci a pris la commande.
+    3. Le PCC conduit. Si aucun PCC ne prend la commande dans les 3 s, le frein d'urgence se serre (PERTE DE LIAISON PCC) jusqu'à ce qu'un PCC le desserre.
+    4. metroSystem fait passer la rame sur sa boucle, en station, et les vues montrent ses rames. L'exploitant de metroSystem met ensuite la rame en service.
+    5. En cas d'urgence, frappez l'**ARRÊT** : il agit toujours.
+    6. Pour reprendre la main, repassez le sélecteur sur **LOCALE** : la rame revient sur la voie d'essai.
     """ }
 
     private var glossaryBody: String { """
     - **Acquittement** — acknowledgment
     - **AVA** — *AVertisseur Acoustique* (horn)
     - **Boucle de Sécurité (BS)** — safety interlock loop
+    - **Canton** — block : section fixe de ligne qu'une seule rame occupe à la fois
     - **Coupure** — cutoff / isolation
     - **FP** — *Fermeture Portes*
     - **K-** — préfixe des contacteurs (*contactor*) en symbologie électrique
     - **Manipulateur** — controller / handle
     - **Navette (NAV)** — service navette entre les deux terminus
     - **PA / PM** — *Pilotage Automatique / Manuel*
+    - **PCC** — *Poste de Commande Centralisé* : le poste central qui supervise les rames de la ligne
     - **PO G / PO D** — *Porte Ouverture Gauche / Droite*
+    - **Point d'arrêt** — stopping point : où le PCC impose l'arrêt de la rame
     - **Pupitre** — cab control desk
+    - **Rame** — trainset
     - **Veille** — vigilance device / dead-man
     - **Voyant** — indicator light
     """ }

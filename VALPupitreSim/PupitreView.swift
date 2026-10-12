@@ -8,14 +8,19 @@ import SwiftUI
 /// The virtual control desk. Layout, left → right:
 ///   switches • reverser + master controller • VEILLE + voyants/buttons •
 ///   speedometer + emergency brake.
+///
+/// Under PCC command the desk is locked: the controls show what the PCC sets
+/// but don't respond, and only ARRÊT stays live.
 struct PupitreView: View {
     @Bindable var model: SimulationModel
 
+    private var locked: Bool { model.authority == .pcc }
+
     var body: some View {
         HStack(alignment: .top, spacing: 22) {
-            switchPanel
+            switchPanel.lockedUnderPCC(locked)
             Divider().overlay(Color.white.opacity(0.15))
-            controllerPanel
+            controllerPanel.lockedUnderPCC(locked)
             Divider().overlay(Color.white.opacity(0.15))
             veillePanel
             Divider().overlay(Color.white.opacity(0.15))
@@ -32,6 +37,21 @@ struct PupitreView: View {
                 startPoint: .top, endPoint: .bottom
             )
         )
+        .overlay(alignment: .topTrailing) {
+            if locked { pccBanner }
+        }
+    }
+
+    private var pccBanner: some View {
+        Text("COMMANDE PCC — PUPITRE VERROUILLÉ, ARRÊT ACTIF")
+            .font(.system(size: 9, weight: .black))
+            .tracking(0.8)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.green.opacity(0.85))
+            .foregroundStyle(.black)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .padding(6)
     }
 
     private var switchPanel: some View {
@@ -65,6 +85,7 @@ struct PupitreView: View {
             VeilleButton(pressed: $model.kacop,
                          warning: model.deadmanWarning,
                          fraction: model.deadmanFraction)
+                .lockedUnderPCC(locked)
             DoorStatus(canOperate: model.canOperateDoors,
                        leftOpen: model.doorsLeftOpenness,
                        rightOpen: model.doorsRightOpenness)
@@ -94,6 +115,7 @@ struct PupitreView: View {
                 PushButton(label: "AVA", color: .yellow,
                            pressed: $model.hornPressed)
             }
+            .lockedUnderPCC(locked)
         }
     }
 
@@ -488,6 +510,16 @@ private struct Speedometer: View {
 }
 
 // MARK: - Shared helpers
+
+private extension View {
+    /// Locks a group of pupitre controls while the PCC has command: they keep
+    /// showing the state, dimmed, but ignore the mouse.
+    func lockedUnderPCC(_ locked: Bool) -> some View {
+        allowsHitTesting(!locked)
+            .opacity(locked ? 0.45 : 1)
+            .animation(.easeOut(duration: 0.2), value: locked)
+    }
+}
 
 private func captionLabel(_ label: String, helper: String) -> some View {
     VStack(spacing: 1) {
