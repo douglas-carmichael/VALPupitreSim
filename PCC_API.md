@@ -282,8 +282,12 @@ clears, as a fixed-block wayside does.
 The controlling PCC can tell the cab where the other rames on its line are,
 with `traffic` messages (§7). The cab draws each one as it draws itself — two
 cars on the guideway in the chase and cab views, white lamps at its leading
-end and red at its trailing end, its number above it — and as a numbered blue
-marker on the map.
+end and red at its trailing end, its number above it (on an orange mast,
+scaled to stay readable, beyond 60 m) — and as a numbered blue marker on the
+map. The chase and cab views also list the nearest rame ahead and behind
+with the clear distance to each, since curves and stations mostly hide them.
+Report every rame on the line — automated or driven — so the picture is
+whole.
 
 - Each message is the whole picture and replaces the last. An empty list
   clears it. Don't include the cab's own rame.

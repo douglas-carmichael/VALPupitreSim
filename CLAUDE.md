@@ -208,7 +208,9 @@ closure; they don't run their own clocks for simulation.
   `update(dt:)` and dropped after `trafficTimeout`; `PCCLink` clears it
   whenever control changes hands, and `relocate` / LOCALE clear it too.
   Nothing in the physics reacts to it — the PCC's stopping point is what
-  keeps the rame clear.
+  keeps the rame clear. `trafficNeighbours` gives the nearest one ahead and
+  behind with the clear gap, for `TrafficReadout` (chase view, cab HUD);
+  `OtherRamesLayer` puts a distance-scaled beacon on rames past 60 m.
 
 - **Telemetry is derived, never fed back.** `RameTelemetry.advance` takes the
   step's regime and commanded acceleration; nothing in the physics reads it,

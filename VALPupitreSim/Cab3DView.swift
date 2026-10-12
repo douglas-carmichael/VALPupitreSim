@@ -174,6 +174,14 @@ struct Cab3DView: View {
             .padding(.horizontal, 16)
             .padding(.top, 16)
 
+            // The other rames on a PCC's line, which the curves and the
+            // stations mostly hide.
+            HStack {
+                Spacer()
+                TrafficReadout(model: model)
+            }
+            .padding(.horizontal, 16)
+
             if model.deadmanWarning {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")

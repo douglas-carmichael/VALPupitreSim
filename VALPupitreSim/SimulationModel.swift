@@ -533,6 +533,45 @@ final class SimulationModel {
         trafficAge = 0
     }
 
+    /// One of the other rames as seen from this one: the clear distance
+    /// between the two rames' facing ends, along the line.
+    struct TrafficNeighbour: Equatable {
+        var rame: String
+        var gapM: Double
+        var speedMS: Double
+        var sense: Direction
+    }
+
+    /// The nearest of the other rames ahead (in the running direction; AV
+    /// when the reverser is neutral) and behind. Both rames are 26 m long
+    /// whichever way they run, so the gap is the distance between car-1
+    /// centres less one rame length. On a loop one rame can be both.
+    var trafficNeighbours: (ahead: TrafficNeighbour?, behind: TrafficNeighbour?) {
+        let length = Self.avEndM + Self.arEndM
+        let sign: Double = direction == .reverse ? -1 : 1
+        var ahead: TrafficNeighbour?, behind: TrafficNeighbour?
+        for rame in otherRames {
+            var forward = sign * (rame.positionM - positionM)
+            var backward = -forward
+            if layout.isLoop {
+                forward = forward.truncatingRemainder(dividingBy: layout.lengthM)
+                if forward < 0 { forward += layout.lengthM }
+                backward = layout.lengthM - forward
+            }
+            func neighbour(_ d: Double) -> TrafficNeighbour {
+                TrafficNeighbour(rame: rame.rame, gapM: max(0, d - length),
+                                 speedMS: rame.speedMS, sense: rame.sense)
+            }
+            if forward >= 0, forward - length < (ahead?.gapM ?? .infinity) {
+                ahead = neighbour(forward)
+            }
+            if backward > 0, backward - length < (behind?.gapM ?? .infinity) {
+                behind = neighbour(backward)
+            }
+        }
+        return (ahead, behind)
+    }
+
     /// Take the other rames off the views — the PCC that reported them is
     /// no longer the one in charge.
     func clearTraffic() {

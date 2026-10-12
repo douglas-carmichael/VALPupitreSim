@@ -12,6 +12,11 @@ import RealityKit
 /// show which way it runs, white at the leading end and red at the trailing
 /// end, and its number floats above it, turned towards the camera.
 ///
+/// A PCC's other rames are mostly hundreds of metres away round the loop,
+/// where a rame is a speck: past `beaconRange` an amber mast rises from its
+/// roof, and mast and number grow with the distance so they keep about the
+/// size they have at `beaconRange` on screen.
+///
 /// Rames are kept in slots, built the first time they are needed and only
 /// moved after that; slots beyond the current count are hidden.
 @MainActor
@@ -25,6 +30,9 @@ final class OtherRamesLayer {
         /// Lamps at the AV end (car 1's nose) and at the AR end (car 2's tail).
         var avLamps: [ModelEntity] = []
         var arLamps: [ModelEntity] = []
+        /// Mast and number, scaled with the distance to the camera.
+        let beacon = Entity()
+        let mast = Entity()
         let label = Entity()
         var rame: String?
         var sense: SimulationModel.Direction?
@@ -34,6 +42,9 @@ final class OtherRamesLayer {
 
     private static let carLength = Float(SimulationModel.carLengthM)
     private static let carPitch = Float(SimulationModel.carPitchM)
+    /// Distance from the camera past which a rame carries its beacon.
+    private static let beaconRange: Float = 60
+    private static let mastHeight: Float = 4
 
     private let bodyMat = RK.material(.white)
     private let bandMat = RK.material(.systemGreen)
@@ -45,6 +56,7 @@ final class OtherRamesLayer {
     private let tailLamp = RK.material(PColor(red: 0.8, green: 0.05, blue: 0.05, alpha: 1),
                                        emissive: .systemRed, emissiveIntensity: 2)
     private let labelMat = RK.material(.white, emissive: .systemYellow, emissiveIntensity: 1)
+    private let mastMat = RK.material(.systemOrange, emissive: .systemOrange, emissiveIntensity: 1.5)
 
     /// Place the rames for this frame. `camera` is the camera's position in
     /// the scene; the numbers turn to face it.
@@ -57,10 +69,19 @@ final class OtherRamesLayer {
             slot.cars[0].transform = track.frame(at: s).transform
             slot.cars[1].transform = track.frame(at: s - Self.carPitch).transform
 
-            let label = track.frame(at: s - Self.carPitch / 2).point(y: 2.6)
-            let toCamera = camera - label
-            slot.label.position = label
-            slot.label.orientation = simd_quatf(angle: atan2(toCamera.x, toCamera.z), axis: [0, 1, 0])
+            // The beacon stands on the roof between the cars, faces the
+            // camera, and past `beaconRange` grows with the distance.
+            let base = track.frame(at: s - Self.carPitch / 2).point(y: 2.0)
+            let toCamera = camera - base
+            let distance = simd_length(toCamera)
+            let far = distance > Self.beaconRange
+            slot.beacon.position = base
+            slot.beacon.orientation = simd_quatf(angle: atan2(toCamera.x, toCamera.z), axis: [0, 1, 0])
+            slot.beacon.scale = SIMD3(repeating: far ? distance / Self.beaconRange : 1)
+            if slot.mast.isEnabled != far { slot.mast.isEnabled = far }
+            slot.label.position = [0, far ? Self.mastHeight + 0.5 : 0.6, 0]
+            // The number itself doubles from half `beaconRange` on.
+            slot.label.scale = SIMD3(repeating: min(2, max(1, 2 * distance / Self.beaconRange)))
 
             // Rebuild the number and swap lamp materials only on change.
             if slot.rame != rame.rame {
@@ -89,7 +110,12 @@ final class OtherRamesLayer {
         slot.cars = [car1, car2]
         slot.root.addChild(car1)
         slot.root.addChild(car2)
-        slot.root.addChild(slot.label)
+        RK.add(RK.box(0.25, Self.mastHeight, 0.25, mastMat), to: slot.mast,
+               at: [0, Self.mastHeight / 2, 0])
+        slot.mast.isEnabled = false
+        slot.beacon.addChild(slot.mast)
+        slot.beacon.addChild(slot.label)
+        slot.root.addChild(slot.beacon)
         root.addChild(slot.root)
         return slot
     }
@@ -122,5 +148,53 @@ final class OtherRamesLayer {
                                 at: [x, 0.35, end + outerEnd * 0.01]))
         }
         return car
+    }
+}
+
+/// The nearest of the other rames ahead and behind, with the clear distance
+/// to each — on the chase and cab views, where curves, walls and stations
+/// usually hide them. Shows nothing while no PCC reports any.
+struct TrafficReadout: View {
+    let model: SimulationModel
+
+    var body: some View {
+        let neighbours = model.trafficNeighbours
+        if neighbours.ahead != nil || neighbours.behind != nil {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("RAMES SUR LA LIGNE")
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundStyle(.white.opacity(0.6))
+                if let ahead = neighbours.ahead {
+                    row("arrow.up", "DEVANT", ahead)
+                }
+                if let behind = neighbours.behind {
+                    row("arrow.down", "DERRIÈRE", behind)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(.ultraThinMaterial.opacity(0.85))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private func row(_ symbol: String, _ title: String,
+                     _ rame: SimulationModel.TrafficNeighbour) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .black))
+            Text(title)
+                .font(.system(size: 9, weight: .black))
+                .frame(width: 58, alignment: .leading)
+            Text(rame.rame)
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+            Text(String(format: "%4.0f m", rame.gapM))
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundStyle(rame.gapM < 50 ? Color.red : (rame.gapM < 150 ? Color.orange : Color.white))
+            Text(rame.speedMS > 0.1 ? String(format: "%3.0f km/h", rame.speedMS * 3.6) : "ARRÊT")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.6))
+        }
+        .foregroundStyle(.white)
     }
 }

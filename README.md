@@ -159,8 +159,9 @@ selector in the status bar from **LOCALE** to **PCC**:
 - The PCC can move the rame onto its own line — metroSystem lends its 1 km
   loop — and give it a stopping point it must not pass. PA stops there, and
   running past it trips the emergency brake.
-- The PCC can report the line's other rames. The 3D views show them, numbered,
-  and the map marks them in blue.
+- The PCC can report the line's other rames. The 3D views show them, numbered
+  (on a tall beacon when far off), the map marks them in blue, and a
+  RAMES SUR LA LIGNE box gives the nearest ahead and behind with the gap.
 - The cab streams its rame's telemetry — traction chain and auxiliaries — so
   the PCC's train synoptic shows real figures.
 

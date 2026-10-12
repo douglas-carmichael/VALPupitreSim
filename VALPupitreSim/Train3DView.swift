@@ -40,6 +40,10 @@ struct Train3DView: View {
         .realityViewCameraControls(.none)
         .backgroundStyle(Color(red: 0.05, green: 0.06, blue: 0.09))
         .background(Color(red: 0.05, green: 0.06, blue: 0.09))
+        .overlay(alignment: .topTrailing) {
+            TrafficReadout(model: model)
+                .padding(10)
+        }
     }
 }
 

@@ -329,12 +329,13 @@ The main window, from top to bottom:
 | Status bar | Position, speed (km/h), master-controller value, the **PA** badge (**PA STBY** when PA is selected but suspended), the **COMMANDE** selector (§2.14), the mute button and the reverser position. Also holds the guide (📖) and **VUE CABINE** buttons. |
 | Station bar | Current station or next stop and its distance; a **POINT D'ARRÊT** pill with the distance to the PCC's stopping point, red within 30 m; a **FREIN D'URGENCE** pill naming the cause when something other than ARRÊT latched the emergency brake (VEILLE (KACOP), COMMANDÉ PAR LE PCC, PERTE DE LIAISON PCC, POINT D'ARRÊT FRANCHI); the USB pupitre status; the **PCC** link pill (§2.14); and a **VIGILANCE** alert during a dead-man warning. |
 | Track overview | Top-down map of the whole line with the train marker (white and green, with an orange arrow for the direction of travel). A PCC's loop is drawn as a racetrack with its cantons ticked off and its name in the middle; the other rames the PCC reports appear as blue markers carrying their numbers. |
-| Chase camera | 3D view of the train on the guideway — straight on the test track, a circle on a PCC's loop. Headlights follow **KPH**. The other rames on a PCC's line run on the same guideway, numbered. |
+| Chase camera | 3D view of the train on the guideway — straight on the test track, a circle on a PCC's loop. Headlights follow **KPH**. The other rames on a PCC's line run on the same guideway, numbered; a **RAMES SUR LA LIGNE** box in the top right corner gives the nearest one ahead and behind (§2.14). |
 | Pupitre | The control desk: switches, reverser, master controller, voyants, push buttons, KACOP, speedometer and emergency brake. Under PCC command everything but ARRÊT is locked, and a green banner says so. |
 
 **VUE CABINE** opens a separate window with the driver's-eye view and a HUD
-overlay, which also shows the distance to the PCC's stopping point. On a PCC's
-line the rame ahead is in sight — its red tail lamps first.
+overlay, which also shows the distance to the PCC's stopping point and, on a
+PCC's line, the **RAMES SUR LA LIGNE** box. The rame ahead comes into sight
+round the curve — its red tail lamps first.
 
 ### 2.14 PCC Link (Commande PCC)
 
@@ -392,7 +393,15 @@ past it (more than 1 m, still moving) latches the emergency brake —
 **Other rames.** The PCC can also tell the cab where the line's other rames
 are. They appear in the chase and cab views as rames like this one, with their
 number above them, white lamps at the end leading and red at the end
-trailing, and on the map as blue numbered markers. Between the PCC's reports
+trailing, and on the map as blue numbered markers. Most of the time they are
+hundreds of metres away round the loop, so beyond 60 m an orange mast rises
+from each one's roof, and mast and number grow with the distance to stay
+readable. Curves, walls and stations still hide them, so the chase view and
+the cab view's HUD carry a **RAMES SUR LA LIGNE** box: the nearest rame
+**DEVANT** (ahead, in the running direction) and **DERRIÈRE** (behind), each
+with its number, the clear distance between the two rames' facing ends —
+orange under 150 m, red under 50 m — and its speed, or ARRÊT. On a loop, a
+lone other rame is both. Between the PCC's reports
 they move on at their last reported speed; if the reports stop for 2 s they
 disappear. They are for display only: it is the PCC's stopping point that
 keeps the rame clear of them.
